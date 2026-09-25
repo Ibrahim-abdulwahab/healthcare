@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b2844">
+  <title>OmniSync · Weekly schedule</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#calendar"><span class="brand-mark">∞</span><span>OmniSync</span></a>
+    <p class="tagline">One Doctor. All Locations. In Sync.</p>
+    <nav aria-label="Main navigation" id="navigation"></nav>
+    <div class="sidebar-bottom">
+      <div class="doctor"><span class="avatar">DR</span><div><strong>Dr. Rachid</strong><small>Cardiologist</small></div></div>
+      <p class="motto">More Time<br><span>for What Matters</span></p>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <span class="demo-label"><span></span> Demo workspace</span>
+      <div class="account"><button class="icon-button" id="notifications" aria-label="Notifications"></button><span class="avatar small">DR</span><strong>Dr. Rachid</strong></div>
+    </header>
+    <main>
+      <div class="page-heading">
+        <div><p class="eyebrow">YOUR PRACTICE, CONNECTED</p><h1 id="page-title">Dr. Rachid – Weekly Schedule</h1><p id="page-subtitle">Multiple locations, one calendar</p></div>
+        <div class="calendar-controls" id="calendar-controls">
+          <select id="view" aria-label="Calendar view"><option value="week">Week</option><option value="day">Day</option></select>
+          <div class="arrows"><button id="previous" class="icon-button" aria-label="Previous week">‹</button><button id="next" class="icon-button" aria-label="Next week">›</button></div>
+          <button id="date-button" class="date-button"><span id="date-label"></span><span data-icon="calendar"></span></button>
+          <button id="today" class="today-button">Today</button>
+        </div>
+      </div>
+      <section id="calendar-page" class="schedule-layout" aria-label="Schedule">
+        <div class="calendar-scroll"><div id="calendar" class="calendar"></div></div>
+        <aside class="schedule-sidebar">
+          <section class="panel"><div class="panel-heading"><h2>Working Hours <span>(Recurring)</span></h2><span class="tiny-dot"></span></div><div id="working-hours"></div><button class="outline-button full" id="add-hours"><span>＋</span> Add Working Hours</button></section>
+          <section class="panel legend"><h2>Legend</h2><div id="location-legend"></div><div class="legend-divider"></div><p><i class="swatch appointment-swatch"></i>Patient Appointment</p><p><i class="swatch followup-swatch"></i>Follow-up</p><p><i class="swatch blocked-swatch"></i>Blocked Time</p></section>
+          <section class="exception-panel"><div class="exception-copy"><span class="info-icon">i</span><div><strong>A little change of plans?</strong><p>Working at a different location on a specific day? Add an exception.</p></div></div><button class="outline-button full" id="add-exception"><span>＋</span> Add Exception</button></section>
+          <p class="timezone"><span data-icon="clock"></span> Beirut time · GMT+3</p>
+        </aside>
+      </section>
+      <section id="secondary-page" class="panel secondary-page" hidden></section>
+      <footer><span class="footer-dot"></span> All your locations. One clear picture.<span>OmniSync © 2026</span></footer>
+    </main>
+  </div>
+  <dialog id="editor" aria-labelledby="dialog-title"><div class="dialog-heading"><h2 id="dialog-title"></h2><button class="icon-button close-dialog" aria-label="Close dialog">×</button></div><div id="dialog-content"></div></dialog>
+  <p id="toast" role="status" hidden></p>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

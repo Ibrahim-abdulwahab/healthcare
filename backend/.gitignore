@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# Local development configuration / secrets
+appsettings.Development.json
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# User-specific files
+*.user
+*.suo
+
+# Logs
+*.log
