@@ -1248,6 +1248,14 @@ namespace Healthcare.Api.Migrations
                         .HasColumnType("text")
                         .HasColumnName("role");
 
+                    b.Property<int?>("StaffDoctorId")
+                        .HasColumnType("integer")
+                        .HasColumnName("staff_doctor_id");
+
+                    b.Property<int?>("StaffOrganizationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("staff_organization_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -1256,6 +1264,10 @@ namespace Healthcare.Api.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("StaffDoctorId");
+
+                    b.HasIndex("StaffOrganizationId");
 
                     b.ToTable("users", null, t =>
                         {
@@ -1695,6 +1707,23 @@ namespace Healthcare.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("DoctorLocation");
+                });
+
+            modelBuilder.Entity("Healthcare.Api.Models.User", b =>
+                {
+                    b.HasOne("Healthcare.Api.Models.Doctor", "StaffDoctor")
+                        .WithMany()
+                        .HasForeignKey("StaffDoctorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Healthcare.Api.Models.Organization", "StaffOrganization")
+                        .WithMany()
+                        .HasForeignKey("StaffOrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("StaffDoctor");
+
+                    b.Navigation("StaffOrganization");
                 });
 
             modelBuilder.Entity("Healthcare.Api.Models.UserRole", b =>

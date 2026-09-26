@@ -8,6 +8,16 @@ public interface IScheduleExceptionService
 
     Task<ScheduleExceptionDto?> GetByIdAsync(int id);
 
+    Task<bool> DoctorOwnsLocationAsync(
+    int doctorId,
+    int doctorLocationId
+    );
+
+    Task<bool> DoctorOwnsExceptionAsync(
+        int doctorId,
+        int scheduleExceptionId
+    );
+
     Task<ScheduleExceptionDto> CreateAsync(
         CreateScheduleExceptionDto dto);
 

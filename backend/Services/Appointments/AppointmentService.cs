@@ -1,17 +1,23 @@
+using Healthcare.Api.Configuration;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Appointments;
 using Healthcare.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Healthcare.Api.Services.Appointments;
 
 public class AppointmentService : IAppointmentService
 {
     private readonly HealthcareDbContext _context;
+    private readonly HealthcareSettings _settings;
 
-    public AppointmentService(HealthcareDbContext context)
+    public AppointmentService(
+        HealthcareDbContext context,
+        IOptions<HealthcareSettings> options)
     {
         _context = context;
+        _settings = options.Value;
     }
 
     public async Task<IEnumerable<AppointmentDto>> GetAllAsync()
@@ -59,14 +65,16 @@ public class AppointmentService : IAppointmentService
             .FirstOrDefaultAsync();
     }
 
-    public async Task<AppointmentDto> CreateAsync(CreateAppointmentDto dto)
+    public async Task<AppointmentDto> CreateAsync(
+        CreateAppointmentDto dto,
+        int createdBy)
     {
         await ValidateAppointmentAsync(
             dto.PatientId,
             dto.DoctorId,
             dto.LocationId,
             dto.VisitTypeId,
-            dto.CreatedBy,
+            createdBy,
             dto.StartDatetime,
             dto.EndDatetime
         );
@@ -83,7 +91,7 @@ public class AppointmentService : IAppointmentService
             EndDatetime = dto.EndDatetime,
             Status = dto.Status,
             Notes = dto.Notes,
-            CreatedBy = dto.CreatedBy,
+            CreatedBy = createdBy,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -110,7 +118,7 @@ public class AppointmentService : IAppointmentService
             dto.DoctorId,
             dto.LocationId,
             dto.VisitTypeId,
-            dto.CreatedBy,
+            appointment.CreatedBy,
             dto.StartDatetime,
             dto.EndDatetime,
             id
@@ -124,7 +132,6 @@ public class AppointmentService : IAppointmentService
         appointment.EndDatetime = dto.EndDatetime;
         appointment.Status = dto.Status;
         appointment.Notes = dto.Notes;
-        appointment.CreatedBy = dto.CreatedBy;
         appointment.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -145,6 +152,132 @@ public class AppointmentService : IAppointmentService
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    public async Task<bool> StaffCanManageDoctorAsync(
+    int staffUserId,
+    int doctorId)
+    {
+        var staff = await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Id == staffUserId &&
+                u.Role == "staff" &&
+                u.IsActive)
+            .Select(u => new
+            {
+                u.StaffDoctorId,
+                u.StaffOrganizationId
+            })
+            .FirstOrDefaultAsync();
+
+        if (staff is null)
+        {
+            return false;
+        }
+
+        // Secretary assigned directly to this doctor
+        if (staff.StaffDoctorId.HasValue)
+        {
+            return staff.StaffDoctorId.Value == doctorId;
+        }
+
+        // Secretary assigned to an organization:
+        // doctor must belong to that organization
+        if (staff.StaffOrganizationId.HasValue)
+        {
+            return await _context.Doctors
+                .AsNoTracking()
+                .AnyAsync(d =>
+                    d.Id == doctorId &&
+                    d.OrganizationId ==
+                        staff.StaffOrganizationId.Value);
+        }
+
+        return false;
+    }
+
+    public async Task<List<AppointmentDto>> GetByStaffUserIdAsync(
+    int staffUserId)
+    {
+        var staff = await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Id == staffUserId &&
+                u.Role == "staff" &&
+                u.IsActive)
+            .Select(u => new
+            {
+                u.StaffDoctorId,
+                u.StaffOrganizationId
+            })
+            .FirstOrDefaultAsync();
+
+        if (staff is null)
+        {
+            return [];
+        }
+
+        var query = _context.Appointments
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (staff.StaffDoctorId.HasValue)
+        {
+            query = query.Where(a =>
+                a.DoctorId == staff.StaffDoctorId.Value);
+        }
+        else if (staff.StaffOrganizationId.HasValue)
+        {
+            query = query.Where(a =>
+                a.Doctor.OrganizationId ==
+                staff.StaffOrganizationId.Value);
+        }
+        else
+        {
+            return [];
+        }
+
+        return await query
+            .Select(a => new AppointmentDto
+            {
+                Id = a.Id,
+                PatientId = a.PatientId,
+                DoctorId = a.DoctorId,
+                LocationId = a.LocationId,
+                VisitTypeId = a.VisitTypeId,
+                StartDatetime = a.StartDatetime,
+                EndDatetime = a.EndDatetime,
+                Status = a.Status,
+                Notes = a.Notes,
+                CreatedBy = a.CreatedBy,
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<AppointmentDto>> GetByDoctorIdAsync(int doctorId)
+    {
+        return await _context.Appointments
+            .AsNoTracking()
+            .Where(a => a.DoctorId == doctorId)
+            .Select(a => new AppointmentDto
+            {
+                Id = a.Id,
+                PatientId = a.PatientId,
+                DoctorId = a.DoctorId,
+                LocationId = a.LocationId,
+                VisitTypeId = a.VisitTypeId,
+                StartDatetime = a.StartDatetime,
+                EndDatetime = a.EndDatetime,
+                Status = a.Status,
+                Notes = a.Notes,
+                CreatedBy = a.CreatedBy,
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt
+            })
+            .ToListAsync();
     }
 
     private async Task ValidateAppointmentAsync(
@@ -202,16 +335,31 @@ public class AppointmentService : IAppointmentService
                 "Appointment end time must be after its start time."
             );
 
-        if (startDatetime.Date != endDatetime.Date)
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(
+    _settings.TimeZone);
+
+        var localStartDatetime = TimeZoneInfo.ConvertTimeFromUtc(
+            startDatetime.ToUniversalTime(),
+            timeZone);
+
+        var localEndDatetime = TimeZoneInfo.ConvertTimeFromUtc(
+            endDatetime.ToUniversalTime(),
+            timeZone);
+
+        if (localStartDatetime.Date != localEndDatetime.Date)
         {
             throw new ArgumentException(
-                "An appointment must start and end on the same date."
+                "An appointment must start and end on the same local date."
             );
         }
 
-        var dayOfWeek = (int)startDatetime.DayOfWeek;
-        var startTime = TimeOnly.FromDateTime(startDatetime);
-        var endTime = TimeOnly.FromDateTime(endDatetime);
+        var dayOfWeek = (int)localStartDatetime.DayOfWeek;
+
+        var startTime = TimeOnly.FromDateTime(
+            localStartDatetime);
+
+        var endTime = TimeOnly.FromDateTime(
+            localEndDatetime);
 
         var hasValidSchedule = await _context.Schedules
             .AsNoTracking()
@@ -230,7 +378,8 @@ public class AppointmentService : IAppointmentService
             );
         }
 
-        var appointmentDate = DateOnly.FromDateTime(startDatetime);
+        var appointmentDate =
+            DateOnly.FromDateTime(localStartDatetime);
 
         var blockingExceptionExists = await _context.ScheduleExceptions
             .AsNoTracking()

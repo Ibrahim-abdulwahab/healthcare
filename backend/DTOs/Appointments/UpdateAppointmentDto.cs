@@ -25,5 +25,4 @@ public class UpdateAppointmentDto
 
     public string? Notes { get; set; }
 
-    public int CreatedBy { get; set; }
 }

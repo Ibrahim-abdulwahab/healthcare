@@ -3,6 +3,7 @@ using Healthcare.Api.DTOs.Schedules;
 using Healthcare.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
+
 namespace Healthcare.Api.Services.Schedules;
 
 public class ScheduleService : IScheduleService
@@ -14,10 +15,54 @@ public class ScheduleService : IScheduleService
         _context = context;
     }
 
+    public async Task<bool> DoctorOwnsLocationAsync(
+    int doctorId,
+    int doctorLocationId)
+    {
+        return await _context.DoctorLocations
+            .AsNoTracking()
+            .AnyAsync(dl =>
+                dl.Id == doctorLocationId &&
+                dl.DoctorId == doctorId
+            );
+    }
+
+    public async Task<bool> DoctorOwnsScheduleAsync(
+    int doctorId,
+    int scheduleId)
+    {
+        return await _context.Schedules
+            .AsNoTracking()
+            .AnyAsync(s =>
+                s.Id == scheduleId &&
+                s.DoctorLocation.DoctorId == doctorId
+            );
+    }
+
     public async Task<List<ScheduleDto>> GetAllAsync()
     {
         return await _context.Schedules
             .AsNoTracking()
+            .Select(s => new ScheduleDto
+            {
+                Id = s.Id,
+                DoctorLocationId = s.DoctorLocationId,
+                DayOfWeek = s.DayOfWeek,
+                StartTime = s.StartTime,
+                EndTime = s.EndTime,
+                SlotDuration = s.SlotDuration,
+                IsActive = s.IsActive,
+                CreatedAt = s.CreatedAt,
+                UpdatedAt = s.UpdatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<ScheduleDto>> GetByDoctorIdAsync(int doctorId)
+    {
+        return await _context.Schedules
+            .AsNoTracking()
+            .Where(s => s.DoctorLocation.DoctorId == doctorId)
             .Select(s => new ScheduleDto
             {
                 Id = s.Id,

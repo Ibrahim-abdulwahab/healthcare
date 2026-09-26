@@ -15,11 +15,18 @@ public class User
 
     public Doctor? Doctor { get; set; }
 
+    public Doctor? StaffDoctor { get; set; }
+    public Organization? StaffOrganization { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public int? StaffDoctorId { get; set; }
+
+    public int? StaffOrganizationId { get; set; }
 
 
     // Relationships

@@ -1,6 +1,8 @@
 using Healthcare.Api.DTOs.ScheduleExceptions;
 using Healthcare.Api.Services.ScheduleExceptions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Healthcare.Api.Controllers;
 
@@ -39,10 +41,33 @@ public class ScheduleExceptionsController : ControllerBase
         return Ok(scheduleException);
     }
 
+    [Authorize(Roles = "admin,doctor")]
     [HttpPost]
     public async Task<ActionResult<ScheduleExceptionDto>> Create(
-        CreateScheduleExceptionDto dto)
+    CreateScheduleExceptionDto dto)
     {
+        if (User.IsInRole("doctor"))
+        {
+            var userIdClaim =
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!int.TryParse(userIdClaim, out var doctorId))
+            {
+                return Unauthorized();
+            }
+
+            var ownsLocation =
+                await _scheduleExceptionService.DoctorOwnsLocationAsync(
+                    doctorId,
+                    dto.DoctorLocationId
+                );
+
+            if (!ownsLocation)
+            {
+                return Forbid();
+            }
+        }
+
         try
         {
             var scheduleException =
@@ -60,11 +85,45 @@ public class ScheduleExceptionsController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "admin,doctor")]
     [HttpPut("{id:int}")]
     public async Task<ActionResult<ScheduleExceptionDto>> Update(
-        int id,
-        UpdateScheduleExceptionDto dto)
+    int id,
+    UpdateScheduleExceptionDto dto)
     {
+        if (User.IsInRole("doctor"))
+        {
+            var userIdClaim =
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!int.TryParse(userIdClaim, out var doctorId))
+            {
+                return Unauthorized();
+            }
+
+            var ownsException =
+                await _scheduleExceptionService.DoctorOwnsExceptionAsync(
+                    doctorId,
+                    id
+                );
+
+            if (!ownsException)
+            {
+                return Forbid();
+            }
+
+            var ownsLocation =
+                await _scheduleExceptionService.DoctorOwnsLocationAsync(
+                    doctorId,
+                    dto.DoctorLocationId
+                );
+
+            if (!ownsLocation)
+            {
+                return Forbid();
+            }
+        }
+
         try
         {
             var scheduleException =
@@ -83,9 +142,32 @@ public class ScheduleExceptionsController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "admin,doctor")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (User.IsInRole("doctor"))
+        {
+            var userIdClaim =
+                User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!int.TryParse(userIdClaim, out var doctorId))
+            {
+                return Unauthorized();
+            }
+
+            var ownsException =
+                await _scheduleExceptionService.DoctorOwnsExceptionAsync(
+                    doctorId,
+                    id
+                );
+
+            if (!ownsException)
+            {
+                return Forbid();
+            }
+        }
+
         var deleted =
             await _scheduleExceptionService.DeleteAsync(id);
 

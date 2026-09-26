@@ -184,6 +184,106 @@ public class DoctorService : IDoctorService
         };
     }
 
+    public async Task<List<DoctorDto>> GetByOrganizationIdAsync(
+    int organizationId)
+    {
+        return await _context.Doctors
+            .AsNoTracking()
+            .Where(d => d.OrganizationId == organizationId)
+            .Select(d => new DoctorDto
+            {
+                Id = d.Id,
+                OrganizationId = d.OrganizationId,
+                FirstName = d.FirstName,
+                LastName = d.LastName,
+                Specialty = d.Specialty,
+                Phone = d.Phone,
+                Email = d.Email,
+                LicenseNumber = d.LicenseNumber,
+                IsActive = d.IsActive,
+                CreatedAt = d.CreatedAt,
+                UpdatedAt = d.UpdatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<DoctorDto?> GetByStaffUserIdAsync(
+        int staffUserId)
+    {
+        var staff = await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Id == staffUserId &&
+                u.Role == "staff" &&
+                u.IsActive)
+            .Select(u => new
+            {
+                u.StaffDoctorId
+            })
+            .FirstOrDefaultAsync();
+
+        if (staff is null || !staff.StaffDoctorId.HasValue)
+        {
+            return null;
+        }
+
+        return await GetByIdAsync(staff.StaffDoctorId.Value);
+    }
+
+    public async Task<int?> GetStaffOrganizationIdAsync(
+    int staffUserId)
+    {
+        return await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Id == staffUserId &&
+                u.Role == "staff" &&
+                u.IsActive &&
+                u.StaffOrganizationId.HasValue)
+            .Select(u => u.StaffOrganizationId)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<bool> StaffCanAccessDoctorAsync(
+    int staffUserId,
+    int doctorId)
+    {
+        var staff = await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Id == staffUserId &&
+                u.Role == "staff" &&
+                u.IsActive)
+            .Select(u => new
+            {
+                u.StaffDoctorId,
+                u.StaffOrganizationId
+            })
+            .FirstOrDefaultAsync();
+
+        if (staff is null)
+        {
+            return false;
+        }
+
+        if (staff.StaffDoctorId.HasValue)
+        {
+            return staff.StaffDoctorId.Value == doctorId;
+        }
+
+        if (staff.StaffOrganizationId.HasValue)
+        {
+            return await _context.Doctors
+                .AsNoTracking()
+                .AnyAsync(d =>
+                    d.Id == doctorId &&
+                    d.OrganizationId ==
+                        staff.StaffOrganizationId.Value);
+        }
+
+        return false;
+    }
+
     public async Task<bool> DeleteAsync(int id)
     {
         var doctor = await _context.Doctors

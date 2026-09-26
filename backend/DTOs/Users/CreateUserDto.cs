@@ -22,4 +22,8 @@ public class CreateUserDto
     public string Role { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
+
+    public int? StaffDoctorId { get; set; }
+
+    public int? StaffOrganizationId { get; set; }
 }

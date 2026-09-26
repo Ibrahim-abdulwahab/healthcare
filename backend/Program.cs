@@ -1,5 +1,9 @@
 using Healthcare.Api.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using Healthcare.Api.Services.Organizations;
 using Healthcare.Api.Services.Locations;
 using Healthcare.Api.Services.Doctors;
@@ -28,6 +32,9 @@ using Healthcare.Api.Services.HealthcareFiles;
 using Healthcare.Api.Services.AuditLogs;
 using Healthcare.Api.Services.SystemSettings;
 using Healthcare.Api.Services.CodeLists;
+using Healthcare.Api.Configuration;
+using Healthcare.Api.Services.Auth;
+using Healthcare.Api.Services.Availability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -70,8 +77,91 @@ builder.Services.AddScoped<IHealthcareFileService, HealthcareFileService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
 builder.Services.AddScoped<ICodeListService, CodeListService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 
 builder.Services.AddControllers();
+builder.Services.Configure<JwtSettings>(
+    builder.Configuration.GetSection("Jwt")
+);
+builder.Services.Configure<HealthcareSettings>(
+    builder.Configuration.GetSection("Healthcare")
+);
+
+var jwtSettings = builder.Configuration
+    .GetSection("Jwt")
+    .Get<JwtSettings>()
+    ?? throw new InvalidOperationException(
+        "JWT configuration is missing."
+    );
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme =
+            JwtBearerDefaults.AuthenticationScheme;
+
+        options.DefaultChallengeScheme =
+            JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+{
+    options.TokenValidationParameters =
+        new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSettings.Key)
+            ),
+            ClockSkew = TimeSpan.Zero
+        };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var userIdClaim = context.Principal?.FindFirst(
+                ClaimTypes.NameIdentifier
+            )?.Value;
+
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                context.Fail("Invalid user.");
+                return;
+            }
+
+            var dbContext = context.HttpContext.RequestServices
+                .GetRequiredService<HealthcareDbContext>();
+
+            var isActive = await dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == userId && u.IsActive);
+
+            if (!isActive)
+            {
+                context.Fail("User is inactive or no longer exists.");
+            }
+        }
+    };
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("admin"));
+
+    options.AddPolicy("DoctorOnly", policy =>
+        policy.RequireRole("doctor"));
+
+    options.AddPolicy("StaffOnly", policy =>
+        policy.RequireRole("staff"));
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -81,6 +171,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.Run();

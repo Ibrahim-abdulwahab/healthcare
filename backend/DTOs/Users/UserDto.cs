@@ -12,6 +12,10 @@ public class UserDto
 
     public bool IsActive { get; set; }
 
+    public int? StaffDoctorId { get; set; }
+
+    public int? StaffOrganizationId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

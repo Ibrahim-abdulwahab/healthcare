@@ -34,6 +34,78 @@ public class LocationService : ILocationService
             .ToListAsync();
     }
 
+
+    public async Task<List<LocationDto>> GetByDoctorIdAsync(int doctorId)
+    {
+        return await _context.DoctorLocations
+            .AsNoTracking()
+            .Where(dl => dl.DoctorId == doctorId)
+            .Select(dl => dl.Location)
+            .Select(l => new LocationDto
+            {
+                Id = l.Id,
+                OrganizationId = l.OrganizationId,
+                Name = l.Name,
+                Address = l.Address,
+                City = l.City,
+                Phone = l.Phone,
+                RoomNumber = l.RoomNumber,
+                IsActive = l.IsActive,
+                CreatedAt = l.CreatedAt,
+                UpdatedAt = l.UpdatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<LocationDto>> GetByOrganizationIdAsync(
+    int organizationId)
+    {
+        return await _context.Locations
+            .AsNoTracking()
+            .Where(l => l.OrganizationId == organizationId)
+            .Select(l => new LocationDto
+            {
+                Id = l.Id,
+                OrganizationId = l.OrganizationId,
+                Name = l.Name,
+                Address = l.Address,
+                City = l.City,
+                Phone = l.Phone,
+                RoomNumber = l.RoomNumber,
+                IsActive = l.IsActive,
+                CreatedAt = l.CreatedAt,
+                UpdatedAt = l.UpdatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<(int? StaffDoctorId, int? StaffOrganizationId)>
+    GetStaffAssignmentAsync(int staffUserId)
+    {
+        var staff = await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Id == staffUserId &&
+                u.Role == "staff" &&
+                u.IsActive)
+            .Select(u => new
+            {
+                u.StaffDoctorId,
+                u.StaffOrganizationId
+            })
+            .FirstOrDefaultAsync();
+
+        if (staff is null)
+        {
+            return (null, null);
+        }
+
+        return (
+            staff.StaffDoctorId,
+            staff.StaffOrganizationId
+        );
+    }
+
     public async Task<LocationDto?> GetByIdAsync(int id)
     {
         return await _context.Locations

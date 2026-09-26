@@ -8,6 +8,21 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
     {
+        builder.Property(u => u.StaffDoctorId)
+            .HasColumnName("staff_doctor_id");
+
+        builder.Property(u => u.StaffOrganizationId)
+            .HasColumnName("staff_organization_id");
+
+        builder.HasOne(u => u.StaffDoctor)
+            .WithMany()
+            .HasForeignKey(u => u.StaffDoctorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(u => u.StaffOrganization)
+            .WithMany()
+            .HasForeignKey(u => u.StaffOrganizationId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.ToTable("users", table =>
         {
             table.HasCheckConstraint(

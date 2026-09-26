@@ -6,7 +6,19 @@ public interface IScheduleService
 {
     Task<List<ScheduleDto>> GetAllAsync();
 
+    Task<List<ScheduleDto>> GetByDoctorIdAsync(int doctorId);
+
     Task<ScheduleDto?> GetByIdAsync(int id);
+
+    Task<bool> DoctorOwnsScheduleAsync(
+    int doctorId,
+    int scheduleId
+);
+
+    Task<bool> DoctorOwnsLocationAsync(
+    int doctorId,
+    int doctorLocationId
+);
 
     Task<ScheduleDto> CreateAsync(CreateScheduleDto dto);
 

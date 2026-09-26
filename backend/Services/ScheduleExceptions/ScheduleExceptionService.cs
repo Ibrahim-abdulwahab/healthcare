@@ -53,6 +53,30 @@ public class ScheduleExceptionService : IScheduleExceptionService
             .FirstOrDefaultAsync();
     }
 
+    public async Task<bool> DoctorOwnsLocationAsync(
+    int doctorId,
+    int doctorLocationId)
+    {
+        return await _context.DoctorLocations
+            .AsNoTracking()
+            .AnyAsync(dl =>
+                dl.Id == doctorLocationId &&
+                dl.DoctorId == doctorId
+            );
+    }
+
+    public async Task<bool> DoctorOwnsExceptionAsync(
+        int doctorId,
+        int scheduleExceptionId)
+    {
+        return await _context.ScheduleExceptions
+            .AsNoTracking()
+            .AnyAsync(se =>
+                se.Id == scheduleExceptionId &&
+                se.DoctorLocation.DoctorId == doctorId
+            );
+    }
+
     public async Task<ScheduleExceptionDto> CreateAsync(
     CreateScheduleExceptionDto dto)
     {

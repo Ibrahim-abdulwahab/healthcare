@@ -1,11 +1,13 @@
 using Healthcare.Api.DTOs.DoctorLocations;
 using Healthcare.Api.Services.DoctorLocations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Healthcare.Api.Controllers;
 
 [ApiController]
 [Route("api/doctor-locations")]
+[Authorize(Policy = "AdminOnly")]
 public class DoctorLocationsController : ControllerBase
 {
     private readonly IDoctorLocationService _doctorLocationService;

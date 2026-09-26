@@ -1,11 +1,13 @@
 using Healthcare.Api.DTOs.Organizations;
 using Healthcare.Api.Services.Organizations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Healthcare.Api.Controllers;
 
 [ApiController]
 [Route("api/organizations")]
+[Authorize(Policy = "AdminOnly")]
 public class OrganizationsController : ControllerBase
 {
     private readonly IOrganizationService _organizationService;

@@ -26,6 +26,8 @@ public class UserService : IUserService
                 Email = u.Email,
                 Role = u.Role,
                 IsActive = u.IsActive,
+                StaffDoctorId = u.StaffDoctorId,
+                StaffOrganizationId = u.StaffOrganizationId,
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt
             })
@@ -44,6 +46,8 @@ public class UserService : IUserService
                 Email = u.Email,
                 Role = u.Role,
                 IsActive = u.IsActive,
+                StaffDoctorId = u.StaffDoctorId,
+                StaffOrganizationId = u.StaffOrganizationId,
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt
             })
@@ -62,6 +66,12 @@ public class UserService : IUserService
             );
         }
 
+        await ValidateStaffAssignmentAsync(
+        dto.Role,
+        dto.StaffDoctorId,
+        dto.StaffOrganizationId
+    );
+
         var now = DateTime.UtcNow;
 
         var user = new User
@@ -71,6 +81,8 @@ public class UserService : IUserService
             PasswordHash = string.Empty,
             Role = dto.Role,
             IsActive = dto.IsActive,
+            StaffDoctorId = dto.StaffDoctorId,
+            StaffOrganizationId = dto.StaffOrganizationId,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -93,6 +105,8 @@ public class UserService : IUserService
             Email = user.Email,
             Role = user.Role,
             IsActive = user.IsActive,
+            StaffDoctorId = user.StaffDoctorId,
+            StaffOrganizationId = user.StaffOrganizationId,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt
         };
@@ -123,6 +137,12 @@ public class UserService : IUserService
             }
         }
 
+        await ValidateStaffAssignmentAsync(
+            dto.Role,
+            dto.StaffDoctorId,
+            dto.StaffOrganizationId
+        );
+
         var emailExists = await _context.Users
             .AnyAsync(u =>
                 u.Email == dto.Email &&
@@ -140,6 +160,8 @@ public class UserService : IUserService
         user.Email = dto.Email;
         user.Role = dto.Role;
         user.IsActive = dto.IsActive;
+        user.StaffDoctorId = dto.StaffDoctorId;
+        user.StaffOrganizationId = dto.StaffOrganizationId;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -151,9 +173,65 @@ public class UserService : IUserService
             Email = user.Email,
             Role = user.Role,
             IsActive = user.IsActive,
+            StaffDoctorId = user.StaffDoctorId,
+            StaffOrganizationId = user.StaffOrganizationId,
             CreatedAt = user.CreatedAt,
             UpdatedAt = user.UpdatedAt
         };
+    }
+
+    private async Task ValidateStaffAssignmentAsync(
+    string role,
+    int? staffDoctorId,
+    int? staffOrganizationId)
+    {
+        if (role != "staff")
+        {
+            if (staffDoctorId.HasValue || staffOrganizationId.HasValue)
+            {
+                throw new ArgumentException(
+                    "Only staff users can have a staff assignment."
+                );
+            }
+
+            return;
+        }
+
+        var hasDoctor = staffDoctorId.HasValue;
+        var hasOrganization = staffOrganizationId.HasValue;
+
+        if (hasDoctor == hasOrganization)
+        {
+            throw new ArgumentException(
+                "A staff user must be assigned to exactly one doctor or organization."
+            );
+        }
+
+        if (hasDoctor)
+        {
+            var doctorExists = await _context.Doctors
+                .AnyAsync(d => d.Id == staffDoctorId!.Value);
+
+            if (!doctorExists)
+            {
+                throw new ArgumentException(
+                    $"Doctor with ID {staffDoctorId} does not exist."
+                );
+            }
+        }
+
+        if (hasOrganization)
+        {
+            var organizationExists = await _context.Organizations
+                .AnyAsync(o => o.Id == staffOrganizationId!.Value);
+
+            if (!organizationExists)
+            {
+                throw new ArgumentException(
+                    $"Organization with ID {staffOrganizationId} does not exist."
+                );
+            }
+        }
     }
 
     public async Task<bool> DeleteAsync(int id)

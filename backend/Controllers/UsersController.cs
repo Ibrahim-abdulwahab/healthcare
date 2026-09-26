@@ -1,11 +1,13 @@
 using Healthcare.Api.DTOs.Users;
 using Healthcare.Api.Services.Users;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Healthcare.Api.Controllers;
 
 [ApiController]
 [Route("api/users")]
+[Authorize(Policy = "AdminOnly")]
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;

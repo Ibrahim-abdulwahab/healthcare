@@ -19,4 +19,8 @@ public class UpdateUserDto
     public string Role { get; set; } = string.Empty;
 
     public bool IsActive { get; set; }
+
+    public int? StaffDoctorId { get; set; }
+
+    public int? StaffOrganizationId { get; set; }
 }
