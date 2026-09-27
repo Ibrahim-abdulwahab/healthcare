@@ -3,6 +3,10 @@ namespace Healthcare.Api.DTOs.Visits;
 public class VisitDto
 {
     public int Id { get; set; }
+    public string PatientName { get; set; } = "";
+    public string DoctorName { get; set; } = "";
+    public string LocationName { get; set; } = "";
+
 
     public int AppointmentId { get; set; }
 

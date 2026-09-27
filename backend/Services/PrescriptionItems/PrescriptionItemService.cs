@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.PrescriptionItems;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.PrescriptionItems;
 public class PrescriptionItemService : IPrescriptionItemService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public PrescriptionItemService(HealthcareDbContext context)
+    public PrescriptionItemService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<PrescriptionItemDto>> GetAllAsync()
     {
-        return await _context.PrescriptionItems
-            .AsNoTracking()
+        return await _access.List<PrescriptionItem>()
             .Select(pi => new PrescriptionItemDto
             {
                 Id = pi.Id,
@@ -38,8 +40,7 @@ public class PrescriptionItemService : IPrescriptionItemService
 
     public async Task<PrescriptionItemDto?> GetByIdAsync(int id)
     {
-        return await _context.PrescriptionItems
-            .AsNoTracking()
+        return await _access.Query<PrescriptionItem>()
             .Where(pi => pi.Id == id)
             .Select(pi => new PrescriptionItemDto
             {

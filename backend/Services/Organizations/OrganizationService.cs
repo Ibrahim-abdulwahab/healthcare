@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Organizations;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Organizations;
 public class OrganizationService : IOrganizationService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public OrganizationService(HealthcareDbContext context)
+    public OrganizationService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<List<OrganizationDto>> GetAllAsync()
     {
-        return await _context.Organizations
-            .AsNoTracking()
+        return await _access.List<Organization>()
             .Select(o => new OrganizationDto
             {
                 Id = o.Id,
@@ -35,8 +37,7 @@ public class OrganizationService : IOrganizationService
 
     public async Task<OrganizationDto?> GetByIdAsync(int id)
     {
-        return await _context.Organizations
-            .AsNoTracking()
+        return await _access.Query<Organization>()
             .Where(o => o.Id == id)
             .Select(o => new OrganizationDto
             {

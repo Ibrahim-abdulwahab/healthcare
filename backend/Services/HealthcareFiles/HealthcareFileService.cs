@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.HealthcareFiles;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.HealthcareFiles;
 public class HealthcareFileService : IHealthcareFileService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public HealthcareFileService(HealthcareDbContext context)
+    public HealthcareFileService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<HealthcareFileDto>> GetAllAsync()
     {
-        return await _context.Files
-            .AsNoTracking()
+        return await _access.List<HealthcareFile>()
             .Select(f => new HealthcareFileDto
             {
                 Id = f.Id,
@@ -33,8 +35,7 @@ public class HealthcareFileService : IHealthcareFileService
 
     public async Task<HealthcareFileDto?> GetByIdAsync(int id)
     {
-        return await _context.Files
-            .AsNoTracking()
+        return await _access.Query<HealthcareFile>()
             .Where(f => f.Id == id)
             .Select(f => new HealthcareFileDto
             {
@@ -52,7 +53,10 @@ public class HealthcareFileService : IHealthcareFileService
     public async Task<HealthcareFileDto> CreateAsync(
         CreateHealthcareFileDto dto)
     {
-        await ValidateUploadedByAsync(dto.UploadedBy);
+        ResourceAccess.FileParent(dto.TableName);
+        if (!Uri.TryCreate(dto.FileUrl, UriKind.Absolute, out var url) || url.Scheme != "https")
+            throw new ArgumentException("File URL must be an absolute HTTPS URL. Binary upload is not supported.");
+        await ValidateUploadedByAsync(_context.ActorId);
 
         var healthcareFile = new HealthcareFile
         {
@@ -60,7 +64,7 @@ public class HealthcareFileService : IHealthcareFileService
             RecordId = dto.RecordId,
             FileName = dto.FileName,
             FileUrl = dto.FileUrl,
-            UploadedBy = dto.UploadedBy,
+            UploadedBy = _context.ActorId,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -80,13 +84,15 @@ public class HealthcareFileService : IHealthcareFileService
         if (healthcareFile is null)
             return null;
 
-        await ValidateUploadedByAsync(dto.UploadedBy);
+        ResourceAccess.FileParent(dto.TableName);
+        if (!Uri.TryCreate(dto.FileUrl, UriKind.Absolute, out var url) || url.Scheme != "https")
+            throw new ArgumentException("File URL must be an absolute HTTPS URL. Binary upload is not supported.");
+        await ValidateUploadedByAsync(healthcareFile.UploadedBy);
 
         healthcareFile.TableName = dto.TableName;
         healthcareFile.RecordId = dto.RecordId;
         healthcareFile.FileName = dto.FileName;
         healthcareFile.FileUrl = dto.FileUrl;
-        healthcareFile.UploadedBy = dto.UploadedBy;
 
         await _context.SaveChangesAsync();
 

@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.LabRequests;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.LabRequests;
 public class LabRequestService : ILabRequestService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public LabRequestService(HealthcareDbContext context)
+    public LabRequestService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<LabRequestDto>> GetAllAsync()
     {
-        return await _context.LabRequests
-            .AsNoTracking()
+        return await _access.List<LabRequest>()
             .Select(l => new LabRequestDto
             {
                 Id = l.Id,
@@ -34,8 +36,7 @@ public class LabRequestService : ILabRequestService
 
     public async Task<LabRequestDto?> GetByIdAsync(int id)
     {
-        return await _context.LabRequests
-            .AsNoTracking()
+        return await _access.Query<LabRequest>()
             .Where(l => l.Id == id)
             .Select(l => new LabRequestDto
             {

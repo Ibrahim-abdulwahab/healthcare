@@ -58,6 +58,13 @@ public class NotificationsController : ControllerBase
         }
     }
 
+    [HttpPatch("{id:int}/read")]
+    public async Task<ActionResult<NotificationDto>> MarkRead(int id)
+    {
+        var notification = await _notificationService.MarkReadAsync(id);
+        return notification is null ? NotFound() : Ok(notification);
+    }
+
     [HttpPut("{id:int}")]
     public async Task<ActionResult<NotificationDto>> Update(
         int id,

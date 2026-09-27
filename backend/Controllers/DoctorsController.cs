@@ -21,61 +21,7 @@ public class DoctorsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<DoctorDto>>> GetAll()
     {
-        if (User.IsInRole("admin"))
-        {
-            var doctors = await _doctorService.GetAllAsync();
-            return Ok(doctors);
-        }
-
-        var userIdClaim =
-            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (!int.TryParse(userIdClaim, out var userId))
-        {
-            return Unauthorized();
-        }
-
-        if (User.IsInRole("doctor"))
-        {
-            var doctor = await _doctorService.GetByIdAsync(userId);
-
-            if (doctor is null)
-            {
-                return Ok(new List<DoctorDto>());
-            }
-
-            return Ok(new List<DoctorDto> { doctor });
-        }
-
-        if (User.IsInRole("staff"))
-        {
-            // Staff assigned directly to one doctor
-            var assignedDoctor =
-                await _doctorService.GetByStaffUserIdAsync(userId);
-
-            if (assignedDoctor is not null)
-            {
-                return Ok(new List<DoctorDto> { assignedDoctor });
-            }
-
-            // Staff assigned to an organization
-            var organizationId =
-                await _doctorService.GetStaffOrganizationIdAsync(userId);
-
-            if (organizationId.HasValue)
-            {
-                var doctors =
-                    await _doctorService.GetByOrganizationIdAsync(
-                        organizationId.Value
-                    );
-
-                return Ok(doctors);
-            }
-
-            return Ok(new List<DoctorDto>());
-        }
-
-        return Forbid();
+        return Ok(await _doctorService.GetAllAsync());
     }
 
     [Authorize(Roles = "admin,doctor,staff")]

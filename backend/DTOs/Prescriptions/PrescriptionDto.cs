@@ -3,6 +3,9 @@ namespace Healthcare.Api.DTOs.Prescriptions;
 public class PrescriptionDto
 {
     public int Id { get; set; }
+    public string PatientName { get; set; } = "";
+    public string DoctorName { get; set; } = "";
+
 
     public int ConsultationId { get; set; }
 

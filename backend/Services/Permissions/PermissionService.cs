@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Permissions;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Permissions;
 public class PermissionService : IPermissionService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public PermissionService(HealthcareDbContext context)
+    public PermissionService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<PermissionDto>> GetAllAsync()
     {
-        return await _context.Permissions
-            .AsNoTracking()
+        return await _access.List<Permission>()
             .Select(p => new PermissionDto
             {
                 Id = p.Id,
@@ -30,8 +32,7 @@ public class PermissionService : IPermissionService
 
     public async Task<PermissionDto?> GetByIdAsync(int id)
     {
-        return await _context.Permissions
-            .AsNoTracking()
+        return await _access.Query<Permission>()
             .Where(p => p.Id == id)
             .Select(p => new PermissionDto
             {

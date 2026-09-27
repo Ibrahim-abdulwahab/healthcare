@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Users;
 using Microsoft.EntityFrameworkCore;
@@ -9,16 +10,17 @@ namespace Healthcare.Api.Services.Users;
 public class UserService : IUserService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public UserService(HealthcareDbContext context)
+    public UserService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<List<UserDto>> GetAllAsync()
     {
-        return await _context.Users
-            .AsNoTracking()
+        return await _access.List<User>()
             .Select(u => new UserDto
             {
                 Id = u.Id,
@@ -36,8 +38,7 @@ public class UserService : IUserService
 
     public async Task<UserDto?> GetByIdAsync(int id)
     {
-        return await _context.Users
-            .AsNoTracking()
+        return await _access.Query<User>()
             .Where(u => u.Id == id)
             .Select(u => new UserDto
             {

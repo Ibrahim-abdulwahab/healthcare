@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Schedules;
 using Healthcare.Api.Models;
@@ -9,10 +10,12 @@ namespace Healthcare.Api.Services.Schedules;
 public class ScheduleService : IScheduleService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public ScheduleService(HealthcareDbContext context)
+    public ScheduleService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<bool> DoctorOwnsLocationAsync(
@@ -41,8 +44,7 @@ public class ScheduleService : IScheduleService
 
     public async Task<List<ScheduleDto>> GetAllAsync()
     {
-        return await _context.Schedules
-            .AsNoTracking()
+        return await _access.List<Schedule>()
             .Select(s => new ScheduleDto
             {
                 Id = s.Id,
@@ -80,8 +82,7 @@ public class ScheduleService : IScheduleService
 
     public async Task<ScheduleDto?> GetByIdAsync(int id)
     {
-        return await _context.Schedules
-            .AsNoTracking()
+        return await _access.Query<Schedule>()
             .Where(s => s.Id == id)
             .Select(s => new ScheduleDto
             {
@@ -124,10 +125,10 @@ public class ScheduleService : IScheduleService
             );
         }
 
-        if (dto.SlotDuration <= 0)
+        if (dto.SlotDuration <= 0 || dto.SlotDuration >= 1440)
         {
             throw new ArgumentException(
-                "SlotDuration must be greater than 0."
+                "SlotDuration must be between 1 and 1439 minutes."
             );
         }
 
@@ -199,10 +200,10 @@ public class ScheduleService : IScheduleService
             );
         }
 
-        if (dto.SlotDuration <= 0)
+        if (dto.SlotDuration <= 0 || dto.SlotDuration >= 1440)
         {
             throw new ArgumentException(
-                "SlotDuration must be greater than 0."
+                "SlotDuration must be between 1 and 1439 minutes."
             );
         }
 

@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.VisitTypes;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.VisitTypes;
 public class VisitTypeService : IVisitTypeService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public VisitTypeService(HealthcareDbContext context)
+    public VisitTypeService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<VisitTypeDto>> GetAllAsync()
     {
-        return await _context.VisitTypes
-            .AsNoTracking()
+        return await _access.List<VisitType>()
             .Select(v => new VisitTypeDto
             {
                 Id = v.Id,
@@ -33,8 +35,7 @@ public class VisitTypeService : IVisitTypeService
 
     public async Task<VisitTypeDto?> GetByIdAsync(int id)
     {
-        return await _context.VisitTypes
-            .AsNoTracking()
+        return await _access.Query<VisitType>()
             .Where(v => v.Id == id)
             .Select(v => new VisitTypeDto
             {
@@ -51,10 +52,10 @@ public class VisitTypeService : IVisitTypeService
 
     public async Task<VisitTypeDto> CreateAsync(CreateVisitTypeDto dto)
     {
-        if (dto.DefaultDuration <= 0)
+        if (dto.DefaultDuration <= 0 || dto.DefaultDuration >= 1440)
         {
             throw new ArgumentException(
-                "Default duration must be greater than 0."
+                "Default duration must be between 1 and 1439 minutes."
             );
         }
 
@@ -85,10 +86,10 @@ public class VisitTypeService : IVisitTypeService
             return null;
         }
 
-        if (dto.DefaultDuration <= 0)
+        if (dto.DefaultDuration <= 0 || dto.DefaultDuration >= 1440)
         {
             throw new ArgumentException(
-                "Default duration must be greater than 0."
+                "Default duration must be between 1 and 1439 minutes."
             );
         }
 

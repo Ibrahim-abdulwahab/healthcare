@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Locations;
 using Microsoft.EntityFrameworkCore;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Locations;
 public class LocationService : ILocationService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public LocationService(HealthcareDbContext context)
+    public LocationService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<List<LocationDto>> GetAllAsync()
     {
-        return await _context.Locations
-            .AsNoTracking()
+        return await _access.List<Location>()
             .Select(l => new LocationDto
             {
                 Id = l.Id,
@@ -108,8 +110,7 @@ public class LocationService : ILocationService
 
     public async Task<LocationDto?> GetByIdAsync(int id)
     {
-        return await _context.Locations
-            .AsNoTracking()
+        return await _access.Query<Location>()
             .Where(l => l.Id == id)
             .Select(l => new LocationDto
             {

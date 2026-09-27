@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 namespace Healthcare.Api.DTOs.PrescriptionItems;
 
 public class CreatePrescriptionItemDto
@@ -10,8 +11,10 @@ public class CreatePrescriptionItemDto
 
     public string? Frequency { get; set; }
 
+    [Range(1, int.MaxValue)]
     public int? DurationDays { get; set; }
 
+    [Range(1, int.MaxValue)]
     public int? Quantity { get; set; }
 
     public string? Route { get; set; }

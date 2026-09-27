@@ -1,3 +1,5 @@
+using Healthcare.Api.Infrastructure;
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Visits;
 using Healthcare.Api.Models;
@@ -8,19 +10,24 @@ namespace Healthcare.Api.Services.Visits;
 public class VisitService : IVisitService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public VisitService(HealthcareDbContext context)
+    public VisitService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<VisitDto>> GetAllAsync()
     {
-        return await _context.Visits
-            .AsNoTracking()
+        return await _access.List<Visit>()
             .Select(v => new VisitDto
             {
                 Id = v.Id,
+                PatientName = v.Patient.FirstName + " " + v.Patient.LastName,
+                DoctorName = v.Doctor.FirstName + " " + v.Doctor.LastName,
+                LocationName = v.Location.Name,
+
                 AppointmentId = v.AppointmentId,
                 PatientId = v.PatientId,
                 DoctorId = v.DoctorId,
@@ -36,12 +43,15 @@ public class VisitService : IVisitService
 
     public async Task<VisitDto?> GetByIdAsync(int id)
     {
-        return await _context.Visits
-            .AsNoTracking()
+        return await _access.Query<Visit>()
             .Where(v => v.Id == id)
             .Select(v => new VisitDto
             {
                 Id = v.Id,
+                PatientName = v.Patient.FirstName + " " + v.Patient.LastName,
+                DoctorName = v.Doctor.FirstName + " " + v.Doctor.LastName,
+                LocationName = v.Location.Name,
+
                 AppointmentId = v.AppointmentId,
                 PatientId = v.PatientId,
                 DoctorId = v.DoctorId,
@@ -94,6 +104,10 @@ public class VisitService : IVisitService
         if (visit is null)
             return null;
 
+        if ((visit.PatientId != dto.PatientId || visit.DoctorId != dto.DoctorId || visit.LocationId != dto.LocationId || visit.AppointmentId != dto.AppointmentId) &&
+            (await _context.Consultations.AnyAsync(c => c.VisitId == id) || await _context.PaymentRecords.AnyAsync(p => p.VisitId == id) ||
+             await _context.LabRequests.AnyAsync(l => l.VisitId == id) || await _context.ImagingRequests.AnyAsync(i => i.VisitId == id)))
+            throw new ApiException(409, "A visit with clinical or payment records cannot be reassigned.");
         await ValidateVisitAsync(
             dto.AppointmentId,
             dto.PatientId,
@@ -162,6 +176,9 @@ public class VisitService : IVisitService
                 "The Visit location must match the Appointment location."
             );
 
+        if ((checkInTime.HasValue && checkInTime.Value.Kind != DateTimeKind.Utc) ||
+            (checkOutTime.HasValue && checkOutTime.Value.Kind != DateTimeKind.Utc))
+            throw new ArgumentException("Visit timestamps must be UTC (Z).");
         if (checkInTime.HasValue &&
             checkOutTime.HasValue &&
             checkOutTime.Value < checkInTime.Value)

@@ -21,39 +21,7 @@ public class AppointmentsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<AppointmentDto>>> GetAll()
     {
-        if (User.IsInRole("admin"))
-        {
-            var appointments = await _appointmentService.GetAllAsync();
-            return Ok(appointments);
-        }
-
-        var userIdClaim =
-            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (!int.TryParse(userIdClaim, out var userId))
-        {
-            return Unauthorized();
-        }
-
-        if (User.IsInRole("doctor"))
-        {
-            var doctorAppointments =
-                await _appointmentService.GetByDoctorIdAsync(userId);
-
-            return Ok(doctorAppointments);
-        }
-
-        if (User.IsInRole("staff"))
-        {
-            var staffAppointments =
-                await _appointmentService.GetByStaffUserIdAsync(userId);
-
-            return Ok(staffAppointments);
-        }
-
-        return Forbid();
-
-
+        return Ok(await _appointmentService.GetAllAsync());
     }
 
     [Authorize(Roles = "admin,doctor,staff")]
@@ -225,5 +193,32 @@ public class AppointmentsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    [Authorize(Roles = "admin,staff")]
+    [HttpPatch("{id:int}/status")]
+    public async Task<ActionResult<AppointmentDto>> ChangeStatus(int id, ChangeAppointmentStatusDto dto)
+    {
+        var result = await _appointmentService.ChangeStatusAsync(id, dto);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [Authorize(Roles = "admin,staff")]
+    [HttpPut("{id:int}/reschedule")]
+    public async Task<ActionResult<AppointmentDto>> Reschedule(int id, RescheduleAppointmentDto dto)
+    {
+        var result = await _appointmentService.RescheduleAsync(id, dto);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [Authorize(Roles = "admin,staff")]
+    [HttpGet("{id:int}/availability")]
+    public async Task<IActionResult> RescheduleAvailability(int id, [FromQuery] DateOnly date,
+        [FromQuery] int doctorId, [FromQuery] int locationId, [FromQuery] int visitTypeId,
+        [FromServices] Healthcare.Api.Services.Availability.IAvailabilityService availability,
+        [FromServices] Healthcare.Api.Security.ResourceAccess access)
+    {
+        if (!await access.CanRead("Doctors", doctorId)) return Forbid();
+        return Ok(await availability.GetAvailableSlotsAsync(doctorId, locationId, date, visitTypeId, id));
     }
 }

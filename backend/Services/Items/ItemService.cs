@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Items;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Items;
 public class ItemService : IItemService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public ItemService(HealthcareDbContext context)
+    public ItemService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<ItemDto>> GetAllAsync()
     {
-        return await _context.Items
-            .AsNoTracking()
+        return await _access.List<Item>()
             .Select(i => new ItemDto
             {
                 Id = i.Id,
@@ -37,8 +39,7 @@ public class ItemService : IItemService
 
     public async Task<ItemDto?> GetByIdAsync(int id)
     {
-        return await _context.Items
-            .AsNoTracking()
+        return await _access.Query<Item>()
             .Where(i => i.Id == id)
             .Select(i => new ItemDto
             {

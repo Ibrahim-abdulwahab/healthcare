@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Roles;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Roles;
 public class RoleService : IRoleService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public RoleService(HealthcareDbContext context)
+    public RoleService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<RoleDto>> GetAllAsync()
     {
-        return await _context.Roles
-            .AsNoTracking()
+        return await _access.List<Role>()
             .Select(r => new RoleDto
             {
                 Id = r.Id,
@@ -29,8 +31,7 @@ public class RoleService : IRoleService
 
     public async Task<RoleDto?> GetByIdAsync(int id)
     {
-        return await _context.Roles
-            .AsNoTracking()
+        return await _access.Query<Role>()
             .Where(r => r.Id == id)
             .Select(r => new RoleDto
             {

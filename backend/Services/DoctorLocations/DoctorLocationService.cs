@@ -1,3 +1,5 @@
+using Healthcare.Api.Infrastructure;
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.DoctorLocations;
 using Microsoft.EntityFrameworkCore;
@@ -8,19 +10,23 @@ namespace Healthcare.Api.Services.DoctorLocations;
 public class DoctorLocationService : IDoctorLocationService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public DoctorLocationService(HealthcareDbContext context)
+    public DoctorLocationService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<List<DoctorLocationDto>> GetAllAsync()
     {
-        return await _context.DoctorLocations
-            .AsNoTracking()
+        return await _access.List<DoctorLocation>()
             .Select(dl => new DoctorLocationDto
             {
                 Id = dl.Id,
+                DoctorName = dl.Doctor.FirstName + " " + dl.Doctor.LastName,
+                LocationName = dl.Location.Name,
+
                 DoctorId = dl.DoctorId,
                 LocationId = dl.LocationId,
                 IsActive = dl.IsActive,
@@ -32,12 +38,14 @@ public class DoctorLocationService : IDoctorLocationService
 
     public async Task<DoctorLocationDto?> GetByIdAsync(int id)
     {
-        return await _context.DoctorLocations
-            .AsNoTracking()
+        return await _access.Query<DoctorLocation>()
             .Where(dl => dl.Id == id)
             .Select(dl => new DoctorLocationDto
             {
                 Id = dl.Id,
+                DoctorName = dl.Doctor.FirstName + " " + dl.Doctor.LastName,
+                LocationName = dl.Location.Name,
+
                 DoctorId = dl.DoctorId,
                 LocationId = dl.LocationId,
                 IsActive = dl.IsActive,
@@ -70,6 +78,8 @@ public class DoctorLocationService : IDoctorLocationService
             );
         }
 
+        if (dto.IsActive && await _context.DoctorLocations.AnyAsync(dl => dl.DoctorId == dto.DoctorId && dl.LocationId == dto.LocationId && dl.IsActive))
+            throw new ApiException(409, "An active mapping already exists for this doctor and location.");
         var now = DateTime.UtcNow;
 
         var doctorLocation = new DoctorLocation
@@ -128,6 +138,11 @@ public class DoctorLocationService : IDoctorLocationService
             );
         }
 
+        if (dto.IsActive && await _context.DoctorLocations.AnyAsync(dl => dl.Id != id && dl.DoctorId == dto.DoctorId && dl.LocationId == dto.LocationId && dl.IsActive))
+            throw new ApiException(409, "An active mapping already exists for this doctor and location.");
+        if ((doctorLocation.DoctorId != dto.DoctorId || doctorLocation.LocationId != dto.LocationId) &&
+            (await _context.Schedules.AnyAsync(s => s.DoctorLocationId == id) || await _context.ScheduleExceptions.AnyAsync(s => s.DoctorLocationId == id)))
+            throw new ApiException(409, "A mapping with schedules or exceptions cannot be reassigned.");
         doctorLocation.DoctorId = dto.DoctorId;
         doctorLocation.LocationId = dto.LocationId;
         doctorLocation.IsActive = dto.IsActive;

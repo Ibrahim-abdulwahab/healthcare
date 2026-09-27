@@ -1,3 +1,5 @@
+using Healthcare.Api.Infrastructure;
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Consultations;
 using Healthcare.Api.Models;
@@ -8,19 +10,22 @@ namespace Healthcare.Api.Services.Consultations;
 public class ConsultationService : IConsultationService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public ConsultationService(HealthcareDbContext context)
+    public ConsultationService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<ConsultationDto>> GetAllAsync()
     {
-        return await _context.Consultations
-            .AsNoTracking()
+        return await _access.List<Consultation>()
             .Select(c => new ConsultationDto
             {
                 Id = c.Id,
+                PatientName = c.Visit.Patient.FirstName + " " + c.Visit.Patient.LastName,
+
                 VisitId = c.VisitId,
                 ReasonForVisit = c.ReasonForVisit,
                 Diagnosis = c.Diagnosis,
@@ -36,12 +41,13 @@ public class ConsultationService : IConsultationService
 
     public async Task<ConsultationDto?> GetByIdAsync(int id)
     {
-        return await _context.Consultations
-            .AsNoTracking()
+        return await _access.Query<Consultation>()
             .Where(c => c.Id == id)
             .Select(c => new ConsultationDto
             {
                 Id = c.Id,
+                PatientName = c.Visit.Patient.FirstName + " " + c.Visit.Patient.LastName,
+
                 VisitId = c.VisitId,
                 ReasonForVisit = c.ReasonForVisit,
                 Diagnosis = c.Diagnosis,
@@ -61,7 +67,7 @@ public class ConsultationService : IConsultationService
         await ValidateConsultationAsync(
             dto.VisitId,
             dto.NextAppointmentId,
-            dto.CreatedBy
+            _context.ActorId
         );
 
         var existingConsultation = await _context.Consultations
@@ -85,7 +91,7 @@ public class ConsultationService : IConsultationService
             Notes = dto.Notes,
             FollowUpPlan = dto.FollowUpPlan,
             NextAppointmentId = dto.NextAppointmentId,
-            CreatedBy = dto.CreatedBy,
+            CreatedBy = _context.ActorId,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -105,10 +111,12 @@ public class ConsultationService : IConsultationService
         if (consultation is null)
             return null;
 
+        if (consultation.VisitId != dto.VisitId && await _context.Prescriptions.AnyAsync(p => p.ConsultationId == id))
+            throw new ApiException(409, "A consultation with prescriptions cannot change visit.");
         await ValidateConsultationAsync(
             dto.VisitId,
             dto.NextAppointmentId,
-            dto.CreatedBy
+            consultation.CreatedBy
         );
 
         var visitAlreadyUsed = await _context.Consultations
@@ -131,7 +139,6 @@ public class ConsultationService : IConsultationService
         consultation.Notes = dto.Notes;
         consultation.FollowUpPlan = dto.FollowUpPlan;
         consultation.NextAppointmentId = dto.NextAppointmentId;
-        consultation.CreatedBy = dto.CreatedBy;
         consultation.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -183,12 +190,12 @@ public class ConsultationService : IConsultationService
         {
             var appointmentExists = await _context.Appointments
                 .AsNoTracking()
-                .AnyAsync(a => a.Id == nextAppointmentId.Value);
+                .AnyAsync(a => a.Id == nextAppointmentId.Value && _context.Visits.Any(v => v.Id == visitId && v.PatientId == a.PatientId));
 
             if (!appointmentExists)
             {
                 throw new ArgumentException(
-                    $"Appointment with ID {nextAppointmentId.Value} does not exist."
+                    $"Appointment with ID {nextAppointmentId.Value} does not exist for this patient."
                 );
             }
         }

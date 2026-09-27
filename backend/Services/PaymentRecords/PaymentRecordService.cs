@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.PaymentRecords;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.PaymentRecords;
 public class PaymentRecordService : IPaymentRecordService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public PaymentRecordService(HealthcareDbContext context)
+    public PaymentRecordService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<PaymentRecordDto>> GetAllAsync()
     {
-        return await _context.PaymentRecords
-            .AsNoTracking()
+        return await _access.List<PaymentRecord>()
             .Select(p => new PaymentRecordDto
             {
                 Id = p.Id,
@@ -36,8 +38,7 @@ public class PaymentRecordService : IPaymentRecordService
 
     public async Task<PaymentRecordDto?> GetByIdAsync(int id)
     {
-        return await _context.PaymentRecords
-            .AsNoTracking()
+        return await _access.Query<PaymentRecord>()
             .Where(p => p.Id == id)
             .Select(p => new PaymentRecordDto
             {
@@ -60,7 +61,7 @@ public class PaymentRecordService : IPaymentRecordService
     {
         await ValidateRelationshipsAsync(
             dto.VisitId,
-            dto.CollectedBy
+            _context.ActorId
         );
 
         var now = DateTime.UtcNow;
@@ -70,7 +71,7 @@ public class PaymentRecordService : IPaymentRecordService
             VisitId = dto.VisitId,
             Amount = dto.Amount,
             PaymentMethod = dto.PaymentMethod,
-            CollectedBy = dto.CollectedBy,
+            CollectedBy = _context.ActorId,
             PaidTo = dto.PaidTo,
             PaymentStatus = dto.PaymentStatus,
             Notes = dto.Notes,
@@ -96,13 +97,12 @@ public class PaymentRecordService : IPaymentRecordService
 
         await ValidateRelationshipsAsync(
             dto.VisitId,
-            dto.CollectedBy
+            paymentRecord.CollectedBy
         );
 
         paymentRecord.VisitId = dto.VisitId;
         paymentRecord.Amount = dto.Amount;
         paymentRecord.PaymentMethod = dto.PaymentMethod;
-        paymentRecord.CollectedBy = dto.CollectedBy;
         paymentRecord.PaidTo = dto.PaidTo;
         paymentRecord.PaymentStatus = dto.PaymentStatus;
         paymentRecord.Notes = dto.Notes;

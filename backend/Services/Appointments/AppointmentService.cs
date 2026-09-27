@@ -1,3 +1,6 @@
+using Healthcare.Api.Infrastructure;
+using Healthcare.Api.Services.Availability;
+using Healthcare.Api.Security;
 using Healthcare.Api.Configuration;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Appointments;
@@ -10,23 +13,32 @@ namespace Healthcare.Api.Services.Appointments;
 public class AppointmentService : IAppointmentService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
     private readonly HealthcareSettings _settings;
+    private readonly IAvailabilityService _availability;
 
     public AppointmentService(
         HealthcareDbContext context,
-        IOptions<HealthcareSettings> options)
+        ResourceAccess access,
+        IOptions<HealthcareSettings> options, IAvailabilityService availability)
     {
         _context = context;
+        _access = access;
         _settings = options.Value;
+        _availability = availability;
     }
 
     public async Task<IEnumerable<AppointmentDto>> GetAllAsync()
     {
-        return await _context.Appointments
-            .AsNoTracking()
+        return await _access.List<Appointment>()
             .Select(a => new AppointmentDto
             {
                 Id = a.Id,
+                PatientName = a.Patient.FirstName + " " + a.Patient.LastName,
+                DoctorName = a.Doctor.FirstName + " " + a.Doctor.LastName,
+                LocationName = a.Location.Name,
+                VisitTypeName = a.VisitType.Name,
+
                 PatientId = a.PatientId,
                 DoctorId = a.DoctorId,
                 LocationId = a.LocationId,
@@ -37,6 +49,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
+                HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
@@ -44,12 +57,16 @@ public class AppointmentService : IAppointmentService
 
     public async Task<AppointmentDto?> GetByIdAsync(int id)
     {
-        return await _context.Appointments
-            .AsNoTracking()
+        return await _access.Query<Appointment>()
             .Where(a => a.Id == id)
             .Select(a => new AppointmentDto
             {
                 Id = a.Id,
+                PatientName = a.Patient.FirstName + " " + a.Patient.LastName,
+                DoctorName = a.Doctor.FirstName + " " + a.Doctor.LastName,
+                LocationName = a.Location.Name,
+                VisitTypeName = a.VisitType.Name,
+
                 PatientId = a.PatientId,
                 DoctorId = a.DoctorId,
                 LocationId = a.LocationId,
@@ -60,6 +77,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
+                HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .FirstOrDefaultAsync();
@@ -69,15 +87,9 @@ public class AppointmentService : IAppointmentService
         CreateAppointmentDto dto,
         int createdBy)
     {
-        await ValidateAppointmentAsync(
-            dto.PatientId,
-            dto.DoctorId,
-            dto.LocationId,
-            dto.VisitTypeId,
-            createdBy,
-            dto.StartDatetime,
-            dto.EndDatetime
-        );
+        if (!await _access.CanRead("Doctors", dto.DoctorId)) throw new ApiException(403, "Doctor is outside your assignment.");
+        if (dto.Status != "booked") throw new ArgumentException("New appointments must start as booked.");
+        var end = await ValidateAppointmentAsync(dto.PatientId, dto.DoctorId, dto.LocationId, dto.VisitTypeId, dto.StartDatetime);
 
         var now = DateTime.UtcNow;
 
@@ -88,7 +100,7 @@ public class AppointmentService : IAppointmentService
             LocationId = dto.LocationId,
             VisitTypeId = dto.VisitTypeId,
             StartDatetime = dto.StartDatetime,
-            EndDatetime = dto.EndDatetime,
+            EndDatetime = end,
             Status = dto.Status,
             Notes = dto.Notes,
             CreatedBy = createdBy,
@@ -99,7 +111,7 @@ public class AppointmentService : IAppointmentService
         _context.Appointments.Add(appointment);
         await _context.SaveChangesAsync();
 
-        return ToDto(appointment);
+        return (await GetByIdAsync(appointment.Id))!;
     }
 
     public async Task<AppointmentDto?> UpdateAsync(
@@ -113,30 +125,36 @@ public class AppointmentService : IAppointmentService
             return null;
         }
 
-        await ValidateAppointmentAsync(
-            dto.PatientId,
-            dto.DoctorId,
-            dto.LocationId,
-            dto.VisitTypeId,
-            appointment.CreatedBy,
-            dto.StartDatetime,
-            dto.EndDatetime,
-            id
-        );
+        if (dto.ExpectedUpdatedAt.HasValue && dto.ExpectedUpdatedAt.Value != appointment.UpdatedAt)
+            throw new ApiException(409, "The appointment changed. Refresh before editing.");
+        AppointmentLifecycle.Validate(appointment.Status, dto.Status);
+        var moves = appointment.DoctorId != dto.DoctorId || appointment.LocationId != dto.LocationId ||
+            appointment.VisitTypeId != dto.VisitTypeId || appointment.StartDatetime != dto.StartDatetime;
+        var changesPatient = appointment.PatientId != dto.PatientId;
+        var hasVisits = await _context.Visits.AnyAsync(v => v.AppointmentId == id);
+        if ((moves || changesPatient) && hasVisits) throw new ApiException(409, "Appointments with visits cannot be reassigned or rescheduled.");
+        if ((moves || changesPatient) && appointment.Status is "completed" or "cancelled") throw new ApiException(409, "Terminal appointments cannot be rescheduled or reassigned.");
+        if ((changesPatient || appointment.DoctorId != dto.DoctorId) && await _context.FollowUps.AnyAsync(f => f.AppointmentId == id))
+            throw new ApiException(409, "The appointment is linked to follow-ups and cannot be reassigned.");
+        if (changesPatient && await _context.Consultations.AnyAsync(c => c.NextAppointmentId == id))
+            throw new ApiException(409, "The appointment is referenced by a consultation and cannot change patient.");
+        var end = appointment.EndDatetime;
+        if (moves) end = await ValidateAppointmentAsync(dto.PatientId, dto.DoctorId, dto.LocationId, dto.VisitTypeId, dto.StartDatetime, id);
+        else if (changesPatient && !await _context.Patients.AnyAsync(p => p.Id == dto.PatientId)) throw new ArgumentException("Patient does not exist.");
 
         appointment.PatientId = dto.PatientId;
         appointment.DoctorId = dto.DoctorId;
         appointment.LocationId = dto.LocationId;
         appointment.VisitTypeId = dto.VisitTypeId;
         appointment.StartDatetime = dto.StartDatetime;
-        appointment.EndDatetime = dto.EndDatetime;
+        appointment.EndDatetime = end;
         appointment.Status = dto.Status;
         appointment.Notes = dto.Notes;
         appointment.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        return ToDto(appointment);
+        return (await GetByIdAsync(appointment.Id))!;
     }
 
     public async Task<bool> DeleteAsync(int id)
@@ -242,6 +260,11 @@ public class AppointmentService : IAppointmentService
             .Select(a => new AppointmentDto
             {
                 Id = a.Id,
+                PatientName = a.Patient.FirstName + " " + a.Patient.LastName,
+                DoctorName = a.Doctor.FirstName + " " + a.Doctor.LastName,
+                LocationName = a.Location.Name,
+                VisitTypeName = a.VisitType.Name,
+
                 PatientId = a.PatientId,
                 DoctorId = a.DoctorId,
                 LocationId = a.LocationId,
@@ -252,6 +275,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
+                HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
@@ -265,6 +289,11 @@ public class AppointmentService : IAppointmentService
             .Select(a => new AppointmentDto
             {
                 Id = a.Id,
+                PatientName = a.Patient.FirstName + " " + a.Patient.LastName,
+                DoctorName = a.Doctor.FirstName + " " + a.Doctor.LastName,
+                LocationName = a.Location.Name,
+                VisitTypeName = a.VisitType.Name,
+
                 PatientId = a.PatientId,
                 DoctorId = a.DoctorId,
                 LocationId = a.LocationId,
@@ -275,145 +304,39 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
+                HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
     }
 
-    private async Task ValidateAppointmentAsync(
-        int patientId,
-        int doctorId,
-        int locationId,
-        int visitTypeId,
-        int createdBy,
-        DateTime startDatetime,
-        DateTime endDatetime,
-    int? excludeAppointmentId = null)
+    private async Task<DateTime> ValidateAppointmentAsync(int patientId, int doctorId, int locationId, int visitTypeId, DateTime start, int? excludeId = null)
     {
-        if (!await _context.Patients.AnyAsync(p => p.Id == patientId))
-            throw new ArgumentException(
-                $"Patient with ID {patientId} does not exist."
-            );
+        if (start.Kind != DateTimeKind.Utc) throw new ArgumentException("Appointment start must be a UTC timestamp ending in Z.");
+        if (!await _context.Patients.AnyAsync(p => p.Id == patientId)) throw new ArgumentException("Patient does not exist.");
+        var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(start, TimeZoneInfo.FindSystemTimeZoneById(_settings.TimeZone)));
+        var slots = await _availability.GetAvailableSlotsAsync(doctorId, locationId, date, visitTypeId, excludeId);
+        var slot = slots.FirstOrDefault(s => s.StartDatetime == start);
+        if (slot is null) throw new ApiException(409, "This start time is unavailable. Check active resources, working hours, slot alignment and existing bookings.");
+        return slot.EndDatetime;
+    }
 
-        if (!await _context.Doctors.AnyAsync(d => d.Id == doctorId))
-            throw new ArgumentException(
-                $"Doctor with ID {doctorId} does not exist."
-            );
+    public async Task<AppointmentDto?> ChangeStatusAsync(int id, ChangeAppointmentStatusDto dto)
+    {
+        var current = await GetByIdAsync(id);
+        if (current is null) return null;
+        return await UpdateAsync(id, new UpdateAppointmentDto { PatientId = current.PatientId, DoctorId = current.DoctorId,
+            LocationId = current.LocationId, VisitTypeId = current.VisitTypeId, StartDatetime = current.StartDatetime,
+            Notes = current.Notes, Status = dto.Status, ExpectedUpdatedAt = dto.ExpectedUpdatedAt });
+    }
 
-        if (!await _context.Locations.AnyAsync(l => l.Id == locationId))
-            throw new ArgumentException(
-                $"Location with ID {locationId} does not exist."
-            );
-
-        var doctorLocation = await _context.DoctorLocations
-            .AsNoTracking()
-            .FirstOrDefaultAsync(dl =>
-                dl.DoctorId == doctorId &&
-                dl.LocationId == locationId &&
-                dl.IsActive
-            );
-
-        if (doctorLocation is null)
-        {
-            throw new ArgumentException(
-                $"Doctor with ID {doctorId} is not assigned to active Location with ID {locationId}."
-            );
-        }
-
-        if (!await _context.VisitTypes.AnyAsync(v => v.Id == visitTypeId))
-            throw new ArgumentException(
-                $"Visit Type with ID {visitTypeId} does not exist."
-            );
-
-        if (!await _context.Users.AnyAsync(u => u.Id == createdBy))
-            throw new ArgumentException(
-                $"User with ID {createdBy} does not exist."
-            );
-
-        if (endDatetime <= startDatetime)
-            throw new ArgumentException(
-                "Appointment end time must be after its start time."
-            );
-
-        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(
-    _settings.TimeZone);
-
-        var localStartDatetime = TimeZoneInfo.ConvertTimeFromUtc(
-            startDatetime.ToUniversalTime(),
-            timeZone);
-
-        var localEndDatetime = TimeZoneInfo.ConvertTimeFromUtc(
-            endDatetime.ToUniversalTime(),
-            timeZone);
-
-        if (localStartDatetime.Date != localEndDatetime.Date)
-        {
-            throw new ArgumentException(
-                "An appointment must start and end on the same local date."
-            );
-        }
-
-        var dayOfWeek = (int)localStartDatetime.DayOfWeek;
-
-        var startTime = TimeOnly.FromDateTime(
-            localStartDatetime);
-
-        var endTime = TimeOnly.FromDateTime(
-            localEndDatetime);
-
-        var hasValidSchedule = await _context.Schedules
-            .AsNoTracking()
-            .AnyAsync(s =>
-                s.DoctorLocationId == doctorLocation.Id &&
-                s.DayOfWeek == dayOfWeek &&
-                s.IsActive &&
-                s.StartTime <= startTime &&
-                s.EndTime >= endTime
-            );
-
-        if (!hasValidSchedule)
-        {
-            throw new ArgumentException(
-                "The requested appointment time is outside the doctor's active schedule for this location."
-            );
-        }
-
-        var appointmentDate =
-            DateOnly.FromDateTime(localStartDatetime);
-
-        var blockingExceptionExists = await _context.ScheduleExceptions
-            .AsNoTracking()
-            .AnyAsync(se =>
-                se.DoctorLocationId == doctorLocation.Id &&
-                se.Date == appointmentDate &&
-                !se.IsAvailable &&
-                startTime < se.EndTime &&
-                endTime > se.StartTime
-            );
-
-        if (blockingExceptionExists)
-        {
-            throw new ArgumentException(
-                "The requested appointment time overlaps with a period when the doctor is unavailable."
-            );
-        }
-
-        var overlappingAppointmentExists = await _context.Appointments
-            .AsNoTracking()
-            .AnyAsync(a =>
-                a.DoctorId == doctorId &&
-                a.Id != excludeAppointmentId &&
-                a.Status != "cancelled" &&
-                startDatetime < a.EndDatetime &&
-                endDatetime > a.StartDatetime
-            );
-
-        if (overlappingAppointmentExists)
-        {
-            throw new ArgumentException(
-                "The doctor already has another appointment during the requested time."
-            );
-        }
+    public async Task<AppointmentDto?> RescheduleAsync(int id, RescheduleAppointmentDto dto)
+    {
+        var current = await GetByIdAsync(id);
+        if (current is null) return null;
+        return await UpdateAsync(id, new UpdateAppointmentDto { PatientId = current.PatientId, DoctorId = dto.DoctorId,
+            LocationId = dto.LocationId, VisitTypeId = dto.VisitTypeId, StartDatetime = dto.StartDatetime,
+            Notes = current.Notes, Status = current.Status, ExpectedUpdatedAt = dto.ExpectedUpdatedAt });
     }
 
     private static AppointmentDto ToDto(Appointment appointment)

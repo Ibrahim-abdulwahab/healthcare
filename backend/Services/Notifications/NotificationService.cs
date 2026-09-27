@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Notifications;
 using Healthcare.Api.Models;
@@ -8,6 +9,7 @@ namespace Healthcare.Api.Services.Notifications;
 public class NotificationService : INotificationService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
     private static readonly string[] ValidTypes =
     {
@@ -16,15 +18,15 @@ public class NotificationService : INotificationService
         "in-app"
     };
 
-    public NotificationService(HealthcareDbContext context)
+    public NotificationService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<NotificationDto>> GetAllAsync()
     {
-        return await _context.Notifications
-            .AsNoTracking()
+        return await _access.List<Notification>()
             .Select(n => new NotificationDto
             {
                 Id = n.Id,
@@ -39,8 +41,7 @@ public class NotificationService : INotificationService
 
     public async Task<NotificationDto?> GetByIdAsync(int id)
     {
-        return await _context.Notifications
-            .AsNoTracking()
+        return await _access.Query<Notification>()
             .Where(n => n.Id == id)
             .Select(n => new NotificationDto
             {
@@ -124,6 +125,15 @@ public class NotificationService : INotificationService
                 $"User with ID {userId} does not exist."
             );
         }
+    }
+
+    public async Task<NotificationDto?> MarkReadAsync(int id)
+    {
+        var notification = await _context.Notifications.FindAsync(id);
+        if (notification is null) return null;
+        notification.IsRead = true;
+        await _context.SaveChangesAsync();
+        return ToDto(notification);
     }
 
     private static void ValidateType(string type)

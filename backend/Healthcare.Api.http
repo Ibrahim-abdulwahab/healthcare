@@ -1,6 +1,9 @@
-@Healthcare.Api_HostAddress = http://localhost:5252
+@Healthcare.Api_HostAddress = https://localhost:7198
 
-GET {{Healthcare.Api_HostAddress}}/weatherforecast/
+GET {{Healthcare.Api_HostAddress}}/health
+
+### Public, time-only availability
+GET {{Healthcare.Api_HostAddress}}/api/availability?doctorId=1&locationId=1&visitTypeId=1&date=2030-01-07
 Accept: application/json
 
-###
+### Supply a real bearer token using your HTTP client's local variables; never commit tokens.

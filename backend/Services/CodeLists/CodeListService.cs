@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.CodeLists;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.CodeLists;
 public class CodeListService : ICodeListService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public CodeListService(HealthcareDbContext context)
+    public CodeListService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<CodeListDto>> GetAllAsync()
     {
-        return await _context.CodeLists
-            .AsNoTracking()
+        return await _access.List<CodeList>()
             .Select(c => new CodeListDto
             {
                 Id = c.Id,
@@ -33,8 +35,7 @@ public class CodeListService : ICodeListService
 
     public async Task<CodeListDto?> GetByIdAsync(int id)
     {
-        return await _context.CodeLists
-            .AsNoTracking()
+        return await _access.Query<CodeList>()
             .Where(c => c.Id == id)
             .Select(c => new CodeListDto
             {

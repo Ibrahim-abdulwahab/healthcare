@@ -13,6 +13,4 @@ public class CreateConsultationDto
     public string? FollowUpPlan { get; set; }
 
     public int? NextAppointmentId { get; set; }
-
-    public int CreatedBy { get; set; }
 }

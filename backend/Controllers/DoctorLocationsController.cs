@@ -7,7 +7,7 @@ namespace Healthcare.Api.Controllers;
 
 [ApiController]
 [Route("api/doctor-locations")]
-[Authorize(Policy = "AdminOnly")]
+[Authorize]
 public class DoctorLocationsController : ControllerBase
 {
     private readonly IDoctorLocationService _doctorLocationService;

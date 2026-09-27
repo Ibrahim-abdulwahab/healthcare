@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.FollowUps;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.FollowUps;
 public class FollowUpService : IFollowUpService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public FollowUpService(HealthcareDbContext context)
+    public FollowUpService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<FollowUpDto>> GetAllAsync()
     {
-        return await _context.FollowUps
-            .AsNoTracking()
+        return await _access.List<FollowUp>()
             .Select(f => new FollowUpDto
             {
                 Id = f.Id,
@@ -35,8 +37,7 @@ public class FollowUpService : IFollowUpService
 
     public async Task<FollowUpDto?> GetByIdAsync(int id)
     {
-        return await _context.FollowUps
-            .AsNoTracking()
+        return await _access.Query<FollowUp>()
             .Where(f => f.Id == id)
             .Select(f => new FollowUpDto
             {

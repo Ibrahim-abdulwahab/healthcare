@@ -4,6 +4,7 @@ namespace Healthcare.Api.DTOs.Appointments;
 
 public class UpdateAppointmentDto
 {
+    public DateTime? ExpectedUpdatedAt { get; set; }
     public int PatientId { get; set; }
 
     public int DoctorId { get; set; }
@@ -14,7 +15,6 @@ public class UpdateAppointmentDto
 
     public DateTime StartDatetime { get; set; }
 
-    public DateTime EndDatetime { get; set; }
 
     [Required]
     [RegularExpression(

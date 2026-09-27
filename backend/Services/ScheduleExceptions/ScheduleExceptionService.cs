@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.ScheduleExceptions;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.ScheduleExceptions;
 public class ScheduleExceptionService : IScheduleExceptionService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public ScheduleExceptionService(HealthcareDbContext context)
+    public ScheduleExceptionService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<List<ScheduleExceptionDto>> GetAllAsync()
     {
-        return await _context.ScheduleExceptions
-            .AsNoTracking()
+        return await _access.List<ScheduleException>()
             .Select(se => new ScheduleExceptionDto
             {
                 Id = se.Id,
@@ -35,8 +37,7 @@ public class ScheduleExceptionService : IScheduleExceptionService
 
     public async Task<ScheduleExceptionDto?> GetByIdAsync(int id)
     {
-        return await _context.ScheduleExceptions
-            .AsNoTracking()
+        return await _access.Query<ScheduleException>()
             .Where(se => se.Id == id)
             .Select(se => new ScheduleExceptionDto
             {

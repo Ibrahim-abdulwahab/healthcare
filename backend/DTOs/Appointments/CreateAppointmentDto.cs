@@ -14,7 +14,6 @@ public class CreateAppointmentDto
 
     public DateTime StartDatetime { get; set; }
 
-    public DateTime EndDatetime { get; set; }
 
     [Required]
     [RegularExpression(

@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.ImagingRequests;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.ImagingRequests;
 public class ImagingRequestService : IImagingRequestService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public ImagingRequestService(HealthcareDbContext context)
+    public ImagingRequestService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<ImagingRequestDto>> GetAllAsync()
     {
-        return await _context.ImagingRequests
-            .AsNoTracking()
+        return await _access.List<ImagingRequest>()
             .Select(i => new ImagingRequestDto
             {
                 Id = i.Id,
@@ -36,8 +38,7 @@ public class ImagingRequestService : IImagingRequestService
 
     public async Task<ImagingRequestDto?> GetByIdAsync(int id)
     {
-        return await _context.ImagingRequests
-            .AsNoTracking()
+        return await _access.Query<ImagingRequest>()
             .Where(i => i.Id == id)
             .Select(i => new ImagingRequestDto
             {

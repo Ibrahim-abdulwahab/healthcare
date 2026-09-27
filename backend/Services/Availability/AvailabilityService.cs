@@ -6,164 +6,36 @@ using Microsoft.Extensions.Options;
 
 namespace Healthcare.Api.Services.Availability;
 
-public class AvailabilityService : IAvailabilityService
+public class AvailabilityService(HealthcareDbContext context, IOptions<HealthcareSettings> options) : IAvailabilityService
 {
-    private readonly HealthcareDbContext _context;
-    private readonly HealthcareSettings _settings;
-
-    public AvailabilityService(
-        HealthcareDbContext context,
-        IOptions<HealthcareSettings> options)
+    public async Task<List<AvailableSlotDto>> GetAvailableSlotsAsync(int doctorId, int locationId, DateOnly date, int visitTypeId, int? excludeAppointmentId = null)
     {
-        _context = context;
-        _settings = options.Value;
-    }
-
-    public async Task<List<AvailableSlotDto>> GetAvailableSlotsAsync(
-        int doctorId,
-        int locationId,
-        DateOnly date)
-    {
-        // Find the active relationship between the doctor and location.
-        var doctorLocation = await _context.DoctorLocations
-            .AsNoTracking()
-            .FirstOrDefaultAsync(dl =>
-                dl.DoctorId == doctorId &&
-                dl.LocationId == locationId &&
-                dl.IsActive);
-
-        if (doctorLocation is null)
+        if (doctorId <= 0 || locationId <= 0 || visitTypeId <= 0 || date.Year is < 2 or > 9998)
+            throw new ArgumentException("A doctor, location, visit type and valid calendar date are required.");
+        var duration = await context.VisitTypes.Where(v => v.Id == visitTypeId && v.IsActive).Select(v => (int?)v.DefaultDuration).SingleOrDefaultAsync();
+        if (duration is null) return [];
+        // Read existing duplicate mappings together; reject new active duplicates on write.
+        var mappings = context.DoctorLocations.Where(dl => dl.DoctorId == doctorId && dl.LocationId == locationId && dl.IsActive && dl.Doctor.IsActive && dl.Location.IsActive).Select(dl => dl.Id);
+        var schedules = await context.Schedules.AsNoTracking().Where(s => mappings.Contains(s.DoctorLocationId) && s.IsActive).ToListAsync();
+        var exceptions = await context.ScheduleExceptions.AsNoTracking().Where(s => mappings.Contains(s.DoctorLocationId) && s.Date == date).ToListAsync();
+        var weekday = (int)date.DayOfWeek;
+        var working = schedules.Where(s => s.DayOfWeek == weekday).Select(s => new SlotCalculator.Window(s.StartTime, s.EndTime, s.SlotDuration)).ToList();
+        // Extra hours use the same weekday's smallest interval, otherwise the mapping's smallest interval,
+        // otherwise the selected visit duration. Starts are anchored at the extra-hours interval start.
+        foreach (var extra in exceptions.Where(e => e.IsAvailable))
         {
-            return [];
+            var related = schedules.Where(s => s.DoctorLocationId == extra.DoctorLocationId && s.SlotDuration > 0 && s.SlotDuration < 1440).ToList();
+            var step = related.Where(s => s.DayOfWeek == weekday).Select(s => (int?)s.SlotDuration).Min()
+                ?? related.Select(s => (int?)s.SlotDuration).Min() ?? duration.Value;
+            working.Add(new(extra.StartTime, extra.EndTime, step));
         }
-
-        // Find the doctor's active schedules for the requested weekday.
-        var dayOfWeek = (int)date.DayOfWeek;
-
-        var schedules = await _context.Schedules
-            .AsNoTracking()
-            .Where(s =>
-                s.DoctorLocationId == doctorLocation.Id &&
-                s.DayOfWeek == dayOfWeek &&
-                s.IsActive)
-            .OrderBy(s => s.StartTime)
-            .ToListAsync();
-
-        // Find schedule exceptions for this exact date.
-        var exceptions = await _context.ScheduleExceptions
-            .AsNoTracking()
-            .Where(se =>
-                se.DoctorLocationId == doctorLocation.Id &&
-                se.Date == date)
-            .ToListAsync();
-
-        var unavailableExceptions = exceptions
-            .Where(se => !se.IsAvailable)
-            .ToList();
-
-        // All schedule times are interpreted using the
-        // application's configured timezone.
-        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(
-            _settings.TimeZone);
-
-        // Convert the requested local calendar day into its
-        // corresponding UTC boundaries.
-        var localDayStart = DateTime.SpecifyKind(
-            date.ToDateTime(TimeOnly.MinValue),
-            DateTimeKind.Unspecified);
-
-        var localNextDayStart = DateTime.SpecifyKind(
-            date.AddDays(1).ToDateTime(TimeOnly.MinValue),
-            DateTimeKind.Unspecified);
-
-        var utcDayStart = TimeZoneInfo.ConvertTimeToUtc(
-            localDayStart,
-            timeZone);
-
-        var utcNextDayStart = TimeZoneInfo.ConvertTimeToUtc(
-            localNextDayStart,
-            timeZone);
-
-        // Load appointments that occupy part of this local calendar day.
-        //
-        // Cancelled appointments do not block availability.
-        var appointments = await _context.Appointments
-            .AsNoTracking()
-            .Where(a =>
-                a.DoctorId == doctorId &&
-                a.LocationId == locationId &&
-                a.Status != "cancelled" &&
-                a.StartDatetime < utcNextDayStart &&
-                a.EndDatetime > utcDayStart)
-            .ToListAsync();
-
-        var slots = new List<AvailableSlotDto>();
-
-        // Generate candidate slots from each regular schedule.
-        foreach (var schedule in schedules)
-        {
-            var currentTime = schedule.StartTime;
-
-            while (
-                currentTime.AddMinutes(schedule.SlotDuration)
-                <= schedule.EndTime)
-            {
-                var endTime =
-                    currentTime.AddMinutes(schedule.SlotDuration);
-
-                // Remove slots that overlap an unavailable
-                // ScheduleException.
-                var overlapsUnavailableException =
-                    unavailableExceptions.Any(se =>
-                        currentTime < se.EndTime &&
-                        endTime > se.StartTime);
-
-                if (overlapsUnavailableException)
-                {
-                    currentTime = endTime;
-                    continue;
-                }
-
-                // Schedule times represent local application time.
-                var localStart = DateTime.SpecifyKind(
-                    date.ToDateTime(currentTime),
-                    DateTimeKind.Unspecified);
-
-                var localEnd = DateTime.SpecifyKind(
-                    date.ToDateTime(endTime),
-                    DateTimeKind.Unspecified);
-
-                // Convert them to UTC so they can be compared with
-                // Appointment timestamps stored as timestamptz.
-                var utcStart = TimeZoneInfo.ConvertTimeToUtc(
-                    localStart,
-                    timeZone);
-
-                var utcEnd = TimeZoneInfo.ConvertTimeToUtc(
-    localEnd,
-    timeZone);
-
-                var overlapsAppointment =
-                    appointments.Any(a =>
-                        utcStart < a.EndDatetime &&
-                        utcEnd > a.StartDatetime);
-
-                if (overlapsAppointment)
-                {
-                    currentTime = endTime;
-                    continue;
-                }
-
-                slots.Add(new AvailableSlotDto
-                {
-                    StartDatetime = utcStart,
-                    EndDatetime = utcEnd
-                });
-
-                currentTime = endTime;
-            }
-        }
-
-        return slots;
+        var blocked = exceptions.Where(e => !e.IsAvailable).Select(e => new SlotCalculator.Window(e.StartTime, e.EndTime, 1));
+        var from = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue).AddDays(-1), DateTimeKind.Utc);
+        var to = from.AddDays(3);
+        // Deliberately spans every location for this doctor; public output contains times only.
+        var occupied = await context.Appointments.AsNoTracking()
+            .Where(a => a.DoctorId == doctorId && a.Status != "cancelled" && (!excludeAppointmentId.HasValue || a.Id != excludeAppointmentId.Value) && a.StartDatetime < to && a.EndDatetime > from)
+            .Select(a => new SlotCalculator.Busy(a.StartDatetime, a.EndDatetime)).ToListAsync();
+        return SlotCalculator.Calculate(date, duration.Value, TimeZoneInfo.FindSystemTimeZoneById(options.Value.TimeZone), working, blocked, occupied);
     }
 }

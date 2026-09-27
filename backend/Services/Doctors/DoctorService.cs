@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Doctors;
 using Microsoft.EntityFrameworkCore;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Doctors;
 public class DoctorService : IDoctorService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public DoctorService(HealthcareDbContext context)
+    public DoctorService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<List<DoctorDto>> GetAllAsync()
     {
-        return await _context.Doctors
-            .AsNoTracking()
+        return await _access.List<Doctor>()
             .Select(d => new DoctorDto
             {
                 Id = d.Id,
@@ -37,8 +39,7 @@ public class DoctorService : IDoctorService
 
     public async Task<DoctorDto?> GetByIdAsync(int id)
     {
-        return await _context.Doctors
-            .AsNoTracking()
+        return await _access.Query<Doctor>()
             .Where(d => d.Id == id)
             .Select(d => new DoctorDto
             {

@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Patients;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.Patients;
 public class PatientService : IPatientService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public PatientService(HealthcareDbContext context)
+    public PatientService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<PatientDto>> GetAllAsync()
     {
-        return await _context.Patients
-            .AsNoTracking()
+        return await _access.List<Patient>()
             .Select(p => new PatientDto
             {
                 Id = p.Id,
@@ -38,8 +40,7 @@ public class PatientService : IPatientService
 
     public async Task<PatientDto?> GetByIdAsync(int id)
     {
-        return await _context.Patients
-            .AsNoTracking()
+        return await _access.Query<Patient>()
             .Where(p => p.Id == id)
             .Select(p => new PatientDto
             {

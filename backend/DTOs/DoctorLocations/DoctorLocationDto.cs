@@ -3,6 +3,9 @@ namespace Healthcare.Api.DTOs.DoctorLocations;
 public class DoctorLocationDto
 {
     public int Id { get; set; }
+    public string DoctorName { get; set; } = "";
+    public string LocationName { get; set; } = "";
+
 
     public int DoctorId { get; set; }
 

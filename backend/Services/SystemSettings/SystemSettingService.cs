@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.SystemSettings;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.SystemSettings;
 public class SystemSettingService : ISystemSettingService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public SystemSettingService(HealthcareDbContext context)
+    public SystemSettingService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<SystemSettingDto>> GetAllAsync()
     {
-        return await _context.SystemSettings
-            .AsNoTracking()
+        return await _access.List<SystemSetting>()
             .Select(s => new SystemSettingDto
             {
                 Id = s.Id,
@@ -32,8 +34,7 @@ public class SystemSettingService : ISystemSettingService
 
     public async Task<SystemSettingDto?> GetByIdAsync(int id)
     {
-        return await _context.SystemSettings
-            .AsNoTracking()
+        return await _access.Query<SystemSetting>()
             .Where(s => s.Id == id)
             .Select(s => new SystemSettingDto
             {

@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.Prescriptions;
 using Healthcare.Api.Models;
@@ -8,19 +9,23 @@ namespace Healthcare.Api.Services.Prescriptions;
 public class PrescriptionService : IPrescriptionService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public PrescriptionService(HealthcareDbContext context)
+    public PrescriptionService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<PrescriptionDto>> GetAllAsync()
     {
-        return await _context.Prescriptions
-            .AsNoTracking()
+        return await _access.List<Prescription>()
             .Select(p => new PrescriptionDto
             {
                 Id = p.Id,
+                PatientName = p.Patient.FirstName + " " + p.Patient.LastName,
+                DoctorName = p.Doctor.FirstName + " " + p.Doctor.LastName,
+
                 ConsultationId = p.ConsultationId,
                 PatientId = p.PatientId,
                 DoctorId = p.DoctorId,
@@ -35,12 +40,14 @@ public class PrescriptionService : IPrescriptionService
 
     public async Task<PrescriptionDto?> GetByIdAsync(int id)
     {
-        return await _context.Prescriptions
-            .AsNoTracking()
+        return await _access.Query<Prescription>()
             .Where(p => p.Id == id)
             .Select(p => new PrescriptionDto
             {
                 Id = p.Id,
+                PatientName = p.Patient.FirstName + " " + p.Patient.LastName,
+                DoctorName = p.Doctor.FirstName + " " + p.Doctor.LastName,
+
                 ConsultationId = p.ConsultationId,
                 PatientId = p.PatientId,
                 DoctorId = p.DoctorId,

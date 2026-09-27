@@ -35,6 +35,10 @@ using Healthcare.Api.Services.CodeLists;
 using Healthcare.Api.Configuration;
 using Healthcare.Api.Services.Auth;
 using Healthcare.Api.Services.Availability;
+using Healthcare.Api.Security;
+using Healthcare.Api.Infrastructure;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,21 +83,29 @@ builder.Services.AddScoped<ISystemSettingService, SystemSettingService>();
 builder.Services.AddScoped<ICodeListService, CodeListService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
+builder.Services.AddScoped<Healthcare.Api.Services.Reports.ReportService>();
 
-builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<RequestUser>();
+builder.Services.AddScoped<ResourceAccess>();
+builder.Services.AddScoped<ResourceAccessFilter>();
+builder.Services.AddControllers(options => options.Filters.AddService<ResourceAccessFilter>());
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("postgresql");
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("Jwt")
 );
 builder.Services.Configure<HealthcareSettings>(
     builder.Configuration.GetSection("Healthcare")
 );
-
-var jwtSettings = builder.Configuration
-    .GetSection("Jwt")
-    .Get<JwtSettings>()
-    ?? throw new InvalidOperationException(
-        "JWT configuration is missing."
-    );
 
 builder.Services
     .AddAuthentication(options =>
@@ -106,6 +118,14 @@ builder.Services
     })
     .AddJwtBearer(options =>
 {
+var jwtSettings = builder.Configuration
+    .GetSection("Jwt")
+    .Get<JwtSettings>()
+    ?? throw new InvalidOperationException(
+        "JWT configuration is missing."
+    );
+
+
     options.TokenValidationParameters =
         new TokenValidationParameters
         {
@@ -138,20 +158,29 @@ builder.Services
             var dbContext = context.HttpContext.RequestServices
                 .GetRequiredService<HealthcareDbContext>();
 
-            var isActive = await dbContext.Users
+            var currentUser = await dbContext.Users
                 .AsNoTracking()
-                .AnyAsync(u => u.Id == userId && u.IsActive);
+                .Where(u => u.Id == userId && u.IsActive)
+                .Select(u => new { u.Role, u.StaffDoctorId, u.StaffOrganizationId })
+                .SingleOrDefaultAsync();
 
-            if (!isActive)
+            if (currentUser is null || currentUser.Role != context.Principal?.FindFirst(ClaimTypes.Role)?.Value)
             {
-                context.Fail("User is inactive or no longer exists.");
+                context.Fail("User is inactive, no longer exists, or role changed.");
+                return;
             }
+            var identity = (ClaimsIdentity)context.Principal!.Identity!;
+            foreach (var claim in identity.FindAll("staff_doctor_id").Concat(identity.FindAll("staff_organization_id")).ToArray()) identity.RemoveClaim(claim);
+            if (currentUser.StaffDoctorId.HasValue) identity.AddClaim(new Claim("staff_doctor_id", currentUser.StaffDoctorId.Value.ToString()));
+            if (currentUser.StaffOrganizationId.HasValue) identity.AddClaim(new Claim("staff_organization_id", currentUser.StaffOrganizationId.Value.ToString()));
+            if (currentUser.Role == "staff" && currentUser.StaffDoctorId.HasValue == currentUser.StaffOrganizationId.HasValue) context.Fail("Invalid staff assignment.");
         }
     };
 });
 
 builder.Services.AddAuthorization(options =>
 {
+    options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
     options.AddPolicy("AdminOnly", policy =>
         policy.RequireRole("admin"));
 
@@ -164,6 +193,28 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+var jwtSettings = builder.Configuration
+    .GetSection("Jwt")
+    .Get<JwtSettings>()
+    ?? throw new InvalidOperationException(
+        "JWT configuration is missing."
+    );
+
+
+
+if (string.IsNullOrWhiteSpace(jwtSettings.Key) || Encoding.UTF8.GetByteCount(jwtSettings.Key) < 32 ||
+    string.IsNullOrWhiteSpace(jwtSettings.Issuer) || string.IsNullOrWhiteSpace(jwtSettings.Audience) || jwtSettings.ExpirationMinutes <= 0)
+    throw new InvalidOperationException("JWT key (at least 32 bytes), issuer, audience and positive expiration are required.");
+if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DefaultConnection")))
+    throw new InvalidOperationException("PostgreSQL connection configuration is required.");
+TimeZoneInfo.FindSystemTimeZoneById(builder.Configuration["Healthcare:TimeZone"] ?? "");
+app.UseExceptionHandler();
+app.UseStatusCodePages(async status =>
+{
+    var response = status.HttpContext.Response;
+    await response.WriteAsJsonAsync(new Microsoft.AspNetCore.Mvc.ProblemDetails { Status = response.StatusCode, Title = "Request failed" });
+});
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -174,6 +225,10 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();
+
+public partial class Program { }

@@ -16,16 +16,6 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
-    [Authorize(Policy = "AdminOnly")]
-    [HttpGet("admin-test")]
-    public IActionResult AdminTest()
-    {
-        return Ok(new
-        {
-            message = "You are authorized as an admin."
-        });
-    }
-
     [Authorize]
     [HttpGet("me")]
     public IActionResult Me()
@@ -48,6 +38,8 @@ public class AuthController : ControllerBase
         });
     }
 
+    [AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("login")]
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponseDto>> Login(
         LoginRequestDto dto)

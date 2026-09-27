@@ -16,4 +16,5 @@ public interface INotificationService
     );
 
     Task<bool> DeleteAsync(int id);
+    Task<NotificationDto?> MarkReadAsync(int id);
 }

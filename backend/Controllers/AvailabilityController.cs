@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Healthcare.Api.Controllers;
 
 [ApiController]
+[Microsoft.AspNetCore.Authorization.AllowAnonymous]
 [Route("api/availability")]
 public class AvailabilityController : ControllerBase
 {
@@ -20,12 +21,14 @@ public class AvailabilityController : ControllerBase
     public async Task<ActionResult<List<AvailableSlotDto>>> GetAvailableSlots(
         [FromQuery] int doctorId,
         [FromQuery] int locationId,
-        [FromQuery] DateOnly date)
+        [FromQuery] DateOnly date,
+        [FromQuery] int visitTypeId)
     {
         var slots = await _availabilityService.GetAvailableSlotsAsync(
             doctorId,
             locationId,
-            date);
+            date,
+            visitTypeId);
 
         return Ok(slots);
     }

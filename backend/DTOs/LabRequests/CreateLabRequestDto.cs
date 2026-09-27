@@ -9,7 +9,6 @@ public class CreateLabRequestDto
     [Required]
     public string TestName { get; set; } = string.Empty;
 
-    [Required]
     public string? Priority { get; set; }
 
     [Required]

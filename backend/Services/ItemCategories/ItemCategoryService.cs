@@ -1,3 +1,4 @@
+using Healthcare.Api.Security;
 using Healthcare.Api.Data;
 using Healthcare.Api.DTOs.ItemCategories;
 using Healthcare.Api.Models;
@@ -8,16 +9,17 @@ namespace Healthcare.Api.Services.ItemCategories;
 public class ItemCategoryService : IItemCategoryService
 {
     private readonly HealthcareDbContext _context;
+    private readonly ResourceAccess _access;
 
-    public ItemCategoryService(HealthcareDbContext context)
+    public ItemCategoryService(HealthcareDbContext context, ResourceAccess access)
     {
         _context = context;
+        _access = access;
     }
 
     public async Task<IEnumerable<ItemCategoryDto>> GetAllAsync()
     {
-        return await _context.ItemCategories
-            .AsNoTracking()
+        return await _access.List<ItemCategory>()
             .Select(c => new ItemCategoryDto
             {
                 Id = c.Id,
@@ -33,8 +35,7 @@ public class ItemCategoryService : IItemCategoryService
 
     public async Task<ItemCategoryDto?> GetByIdAsync(int id)
     {
-        return await _context.ItemCategories
-            .AsNoTracking()
+        return await _access.Query<ItemCategory>()
             .Where(c => c.Id == id)
             .Select(c => new ItemCategoryDto
             {
@@ -88,6 +89,13 @@ public class ItemCategoryService : IItemCategoryService
             );
         }
 
+        var ancestor = dto.ParentId;
+        var visited = new HashSet<int> { id };
+        while (ancestor.HasValue)
+        {
+            if (!visited.Add(ancestor.Value)) throw new ArgumentException("Item categories cannot contain an ancestor cycle.");
+            ancestor = await _context.ItemCategories.Where(c => c.Id == ancestor.Value).Select(c => c.ParentId).SingleOrDefaultAsync();
+        }
         await ValidateParentAsync(dto.ParentId);
 
         category.Name = dto.Name;

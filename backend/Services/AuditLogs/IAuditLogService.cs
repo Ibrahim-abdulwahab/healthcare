@@ -8,14 +8,4 @@ public interface IAuditLogService
 
     Task<AuditLogDto?> GetByIdAsync(int id);
 
-    Task<AuditLogDto> CreateAsync(
-        CreateAuditLogDto dto
-    );
-
-    Task<AuditLogDto?> UpdateAsync(
-        int id,
-        UpdateAuditLogDto dto
-    );
-
-    Task<bool> DeleteAsync(int id);
 }

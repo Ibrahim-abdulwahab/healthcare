@@ -7,5 +7,7 @@ public interface IAvailabilityService
     Task<List<AvailableSlotDto>> GetAvailableSlotsAsync(
         int doctorId,
         int locationId,
-        DateOnly date);
+        DateOnly date,
+        int visitTypeId,
+        int? excludeAppointmentId = null);
 }

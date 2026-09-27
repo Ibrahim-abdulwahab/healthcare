@@ -3,6 +3,8 @@ namespace Healthcare.Api.DTOs.Consultations;
 public class ConsultationDto
 {
     public int Id { get; set; }
+    public string PatientName { get; set; } = "";
+
 
     public int VisitId { get; set; }
 

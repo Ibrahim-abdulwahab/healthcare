@@ -14,6 +14,4 @@ public class UpdateHealthcareFileDto
 
     [Required]
     public string FileUrl { get; set; } = null!;
-
-    public int UploadedBy { get; set; }
 }

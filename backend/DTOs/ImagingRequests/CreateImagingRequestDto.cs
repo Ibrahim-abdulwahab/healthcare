@@ -9,10 +9,8 @@ public class CreateImagingRequestDto
     [Required]
     public string ServiceName { get; set; } = string.Empty;
 
-    [Required]
     public string? BodyPart { get; set; }
 
-    [Required]
     public string? Priority { get; set; }
 
     [Required]

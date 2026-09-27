@@ -21,58 +21,7 @@ public class LocationsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<LocationDto>>> GetAll()
     {
-        if (User.IsInRole("admin"))
-        {
-            var locations = await _locationService.GetAllAsync();
-
-            return Ok(locations);
-        }
-
-        var userIdClaim =
-            User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (!int.TryParse(userIdClaim, out var userId))
-        {
-            return Unauthorized();
-        }
-
-        if (User.IsInRole("doctor"))
-        {
-            var locations =
-                await _locationService.GetByDoctorIdAsync(userId);
-
-            return Ok(locations);
-        }
-
-        if (User.IsInRole("staff"))
-        {
-            var assignment =
-                await _locationService.GetStaffAssignmentAsync(userId);
-
-            if (assignment.StaffDoctorId.HasValue)
-            {
-                var locations =
-                    await _locationService.GetByDoctorIdAsync(
-                        assignment.StaffDoctorId.Value
-                    );
-
-                return Ok(locations);
-            }
-
-            if (assignment.StaffOrganizationId.HasValue)
-            {
-                var locations =
-                    await _locationService.GetByOrganizationIdAsync(
-                        assignment.StaffOrganizationId.Value
-                    );
-
-                return Ok(locations);
-            }
-
-            return Ok(new List<LocationDto>());
-        }
-
-        return Forbid();
+        return Ok(await _locationService.GetAllAsync());
     }
 
     [Authorize(Roles = "admin,doctor,staff")]

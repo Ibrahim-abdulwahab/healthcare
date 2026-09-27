@@ -6,6 +6,7 @@ public class UpdatePaymentRecordDto
 {
     public int VisitId { get; set; }
 
+    [Range(typeof(decimal), "0.0000000000000000000000000001", "79228162514264337593543950335")]
     public decimal Amount { get; set; }
 
     [Required]
@@ -14,8 +15,6 @@ public class UpdatePaymentRecordDto
         ErrorMessage = "Invalid payment method."
     )]
     public string PaymentMethod { get; set; } = string.Empty;
-
-    public int CollectedBy { get; set; }
 
     [Required]
     [RegularExpression(
