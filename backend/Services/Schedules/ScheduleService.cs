@@ -49,6 +49,7 @@ public class ScheduleService : IScheduleService
             {
                 Id = s.Id,
                 DoctorLocationId = s.DoctorLocationId,
+                DoctorLocationName = s.DoctorLocation.Doctor.FirstName + " " + s.DoctorLocation.Doctor.LastName + " - " + s.DoctorLocation.Location.Name,
                 DayOfWeek = s.DayOfWeek,
                 StartTime = s.StartTime,
                 EndTime = s.EndTime,
@@ -69,6 +70,7 @@ public class ScheduleService : IScheduleService
             {
                 Id = s.Id,
                 DoctorLocationId = s.DoctorLocationId,
+                DoctorLocationName = s.DoctorLocation.Doctor.FirstName + " " + s.DoctorLocation.Doctor.LastName + " - " + s.DoctorLocation.Location.Name,
                 DayOfWeek = s.DayOfWeek,
                 StartTime = s.StartTime,
                 EndTime = s.EndTime,
@@ -88,6 +90,7 @@ public class ScheduleService : IScheduleService
             {
                 Id = s.Id,
                 DoctorLocationId = s.DoctorLocationId,
+                DoctorLocationName = s.DoctorLocation.Doctor.FirstName + " " + s.DoctorLocation.Doctor.LastName + " - " + s.DoctorLocation.Location.Name,
                 DayOfWeek = s.DayOfWeek,
                 StartTime = s.StartTime,
                 EndTime = s.EndTime,
@@ -150,18 +153,7 @@ public class ScheduleService : IScheduleService
 
         await _context.SaveChangesAsync();
 
-        return new ScheduleDto
-        {
-            Id = schedule.Id,
-            DoctorLocationId = schedule.DoctorLocationId,
-            DayOfWeek = schedule.DayOfWeek,
-            StartTime = schedule.StartTime,
-            EndTime = schedule.EndTime,
-            SlotDuration = schedule.SlotDuration,
-            IsActive = schedule.IsActive,
-            CreatedAt = schedule.CreatedAt,
-            UpdatedAt = schedule.UpdatedAt
-        };
+        return (await GetByIdAsync(schedule.Id))!;
     }
 
     public async Task<ScheduleDto?> UpdateAsync(
@@ -217,18 +209,7 @@ public class ScheduleService : IScheduleService
 
         await _context.SaveChangesAsync();
 
-        return new ScheduleDto
-        {
-            Id = schedule.Id,
-            DoctorLocationId = schedule.DoctorLocationId,
-            DayOfWeek = schedule.DayOfWeek,
-            StartTime = schedule.StartTime,
-            EndTime = schedule.EndTime,
-            SlotDuration = schedule.SlotDuration,
-            IsActive = schedule.IsActive,
-            CreatedAt = schedule.CreatedAt,
-            UpdatedAt = schedule.UpdatedAt
-        };
+        return (await GetByIdAsync(schedule.Id))!;
     }
 
     public async Task<bool> DeleteAsync(int id)

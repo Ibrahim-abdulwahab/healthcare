@@ -1,3 +1,5 @@
+import { tokenExpiresAt } from '../lib/session';
+
 const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 const tokenKey = 'healthcare.accessToken';
 export const session = {
@@ -15,11 +17,16 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const headers = new Headers(options.headers);
   if (options.body) headers.set('Content-Type', 'application/json');
   const token = session.token();
+  const expiresAt = tokenExpiresAt(token);
+  if (path !== '/auth/login' && expiresAt !== null && expiresAt <= Date.now()) {
+    session.clear(); window.dispatchEvent(new Event('auth-expired'));
+    throw new ApiError(401, 'Your session expired. Sign in again before saving.');
+  }
   if (token) headers.set('Authorization', `Bearer ${token}`);
   let response: Response;
   try { response = await fetch(`${base}${path}`, { ...options, headers }); }
   catch { throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.'); }
-  if (response.status === 401 && path !== '/auth/login') {
+  if (response.status === 401 && path !== '/auth/login' && token === session.token()) {
     session.clear(); window.dispatchEvent(new Event('auth-expired'));
   }
   if (response.status === 204) return undefined as T;

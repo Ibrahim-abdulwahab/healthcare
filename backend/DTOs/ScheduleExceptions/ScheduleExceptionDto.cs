@@ -5,6 +5,7 @@ public class ScheduleExceptionDto
     public int Id { get; set; }
 
     public int DoctorLocationId { get; set; }
+    public string DoctorLocationName { get; set; } = "";
 
     public DateOnly Date { get; set; }
 

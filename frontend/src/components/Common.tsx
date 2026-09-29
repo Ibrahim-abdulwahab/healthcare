@@ -1,3 +1,4 @@
+import { SessionWarning } from '../auth/Auth';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export function ErrorMessage({ error }: { error: unknown }) { return error ? <p className="error-banner" role="alert">{error instanceof Error ? error.message : String(error)}</p> : null; }
@@ -6,7 +7,7 @@ export function Empty({ children = 'No records found.' }: { children?: ReactNode
 export function Modal({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); }, []);
-  return <dialog ref={ref} onCancel={e => { e.preventDefault(); close(); }}><div className="dialog-heading"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={close}>×</button></div>{children}</dialog>;
+  return <dialog ref={ref} onCancel={e => { e.preventDefault(); close(); }}><div className="dialog-heading"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={close}>×</button></div><SessionWarning />{children}</dialog>;
 }
 export function useLoad<T>(load: () => Promise<T>, dependencies: unknown[]) {
   const [data, setData] = useState<T>();

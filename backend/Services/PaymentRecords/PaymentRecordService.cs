@@ -24,6 +24,9 @@ public class PaymentRecordService : IPaymentRecordService
             {
                 Id = p.Id,
                 VisitId = p.VisitId,
+                VisitName = p.Visit.Patient.FirstName + " " + p.Visit.Patient.LastName + " - " + p.Visit.Doctor.FirstName + " " + p.Visit.Doctor.LastName,
+                VisitDatetime = p.Visit.CheckInTime ?? p.Visit.CreatedAt,
+                CollectedByName = p.Collector.Name,
                 Amount = p.Amount,
                 PaymentMethod = p.PaymentMethod,
                 CollectedBy = p.CollectedBy,
@@ -44,6 +47,9 @@ public class PaymentRecordService : IPaymentRecordService
             {
                 Id = p.Id,
                 VisitId = p.VisitId,
+                VisitName = p.Visit.Patient.FirstName + " " + p.Visit.Patient.LastName + " - " + p.Visit.Doctor.FirstName + " " + p.Visit.Doctor.LastName,
+                VisitDatetime = p.Visit.CheckInTime ?? p.Visit.CreatedAt,
+                CollectedByName = p.Collector.Name,
                 Amount = p.Amount,
                 PaymentMethod = p.PaymentMethod,
                 CollectedBy = p.CollectedBy,
@@ -82,7 +88,7 @@ public class PaymentRecordService : IPaymentRecordService
         _context.PaymentRecords.Add(paymentRecord);
         await _context.SaveChangesAsync();
 
-        return ToDto(paymentRecord);
+        return (await GetByIdAsync(paymentRecord.Id))!;
     }
 
     public async Task<PaymentRecordDto?> UpdateAsync(
@@ -110,7 +116,7 @@ public class PaymentRecordService : IPaymentRecordService
 
         await _context.SaveChangesAsync();
 
-        return ToDto(paymentRecord);
+        return (await GetByIdAsync(paymentRecord.Id))!;
     }
 
     public async Task<bool> DeleteAsync(int id)

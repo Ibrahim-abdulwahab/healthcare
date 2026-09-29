@@ -5,12 +5,15 @@ public class PaymentRecordDto
     public int Id { get; set; }
 
     public int VisitId { get; set; }
+    public string VisitName { get; set; } = "";
+    public DateTime VisitDatetime { get; set; }
 
     public decimal Amount { get; set; }
 
     public string PaymentMethod { get; set; } = string.Empty;
 
     public int CollectedBy { get; set; }
+    public string CollectedByName { get; set; } = "";
 
     public string PaidTo { get; set; } = string.Empty;
 

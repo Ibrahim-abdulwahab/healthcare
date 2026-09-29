@@ -49,7 +49,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
-                HasVisits = a.Visits.Any(),
+                HasCompletedVisits = a.Visits.Any(v => v.Status == "completed"), HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
@@ -77,7 +77,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
-                HasVisits = a.Visits.Any(),
+                HasCompletedVisits = a.Visits.Any(v => v.Status == "completed"), HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .FirstOrDefaultAsync();
@@ -127,7 +127,8 @@ public class AppointmentService : IAppointmentService
 
         if (dto.ExpectedUpdatedAt.HasValue && dto.ExpectedUpdatedAt.Value != appointment.UpdatedAt)
             throw new ApiException(409, "The appointment changed. Refresh before editing.");
-        AppointmentLifecycle.Validate(appointment.Status, dto.Status);
+        var hasCompletedVisit = await _context.Visits.AnyAsync(v => v.AppointmentId == id && v.Status == "completed");
+        AppointmentLifecycle.Validate(appointment.Status, dto.Status, hasCompletedVisit);
         var moves = appointment.DoctorId != dto.DoctorId || appointment.LocationId != dto.LocationId ||
             appointment.VisitTypeId != dto.VisitTypeId || appointment.StartDatetime != dto.StartDatetime;
         var changesPatient = appointment.PatientId != dto.PatientId;
@@ -166,6 +167,8 @@ public class AppointmentService : IAppointmentService
             return false;
         }
 
+        if (await _context.Visits.AnyAsync(v => v.AppointmentId == id))
+            throw new ApiException(409, "An appointment with visits cannot be deleted.");
         _context.Appointments.Remove(appointment);
         await _context.SaveChangesAsync();
 
@@ -275,7 +278,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
-                HasVisits = a.Visits.Any(),
+                HasCompletedVisits = a.Visits.Any(v => v.Status == "completed"), HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();
@@ -304,7 +307,7 @@ public class AppointmentService : IAppointmentService
                 Notes = a.Notes,
                 CreatedBy = a.CreatedBy,
                 CreatedAt = a.CreatedAt,
-                HasVisits = a.Visits.Any(),
+                HasCompletedVisits = a.Visits.Any(v => v.Status == "completed"), HasVisits = a.Visits.Any(),
                 UpdatedAt = a.UpdatedAt
             })
             .ToListAsync();

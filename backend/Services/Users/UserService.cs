@@ -29,6 +29,8 @@ public class UserService : IUserService
                 Role = u.Role,
                 IsActive = u.IsActive,
                 StaffDoctorId = u.StaffDoctorId,
+                StaffDoctorName = u.StaffDoctor == null ? null : u.StaffDoctor.FirstName + " " + u.StaffDoctor.LastName,
+                StaffOrganizationName = u.StaffOrganization == null ? null : u.StaffOrganization.Name,
                 StaffOrganizationId = u.StaffOrganizationId,
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt
@@ -48,6 +50,8 @@ public class UserService : IUserService
                 Role = u.Role,
                 IsActive = u.IsActive,
                 StaffDoctorId = u.StaffDoctorId,
+                StaffDoctorName = u.StaffDoctor == null ? null : u.StaffDoctor.FirstName + " " + u.StaffDoctor.LastName,
+                StaffOrganizationName = u.StaffOrganization == null ? null : u.StaffOrganization.Name,
                 StaffOrganizationId = u.StaffOrganizationId,
                 CreatedAt = u.CreatedAt,
                 UpdatedAt = u.UpdatedAt
@@ -99,18 +103,7 @@ public class UserService : IUserService
 
         await _context.SaveChangesAsync();
 
-        return new UserDto
-        {
-            Id = user.Id,
-            Name = user.Name,
-            Email = user.Email,
-            Role = user.Role,
-            IsActive = user.IsActive,
-            StaffDoctorId = user.StaffDoctorId,
-            StaffOrganizationId = user.StaffOrganizationId,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
+        return (await GetByIdAsync(user.Id))!;
     }
 
     public async Task<UserDto?> UpdateAsync(
@@ -167,18 +160,7 @@ public class UserService : IUserService
 
         await _context.SaveChangesAsync();
 
-        return new UserDto
-        {
-            Id = user.Id,
-            Name = user.Name,
-            Email = user.Email,
-            Role = user.Role,
-            IsActive = user.IsActive,
-            StaffDoctorId = user.StaffDoctorId,
-            StaffOrganizationId = user.StaffOrganizationId,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
+        return (await GetByIdAsync(user.Id))!;
     }
 
     private async Task ValidateStaffAssignmentAsync(

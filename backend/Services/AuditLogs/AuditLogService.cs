@@ -24,6 +24,7 @@ public class AuditLogService : IAuditLogService
             {
                 Id = a.Id,
                 UserId = a.UserId,
+                UserName = a.User.Name + " (" + a.User.Email + ")",
                 Action = a.Action,
                 TableName = a.TableName,
                 RecordId = a.RecordId,
@@ -40,6 +41,7 @@ public class AuditLogService : IAuditLogService
             {
                 Id = a.Id,
                 UserId = a.UserId,
+                UserName = a.User.Name + " (" + a.User.Email + ")",
                 Action = a.Action,
                 TableName = a.TableName,
                 RecordId = a.RecordId,

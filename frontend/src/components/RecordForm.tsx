@@ -1,19 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, query } from '../api/client';
 import type { DataRow } from '../api/types';
 import type { Field } from '../features/resources';
 import { ErrorMessage, useLoad } from './Common';
-import { dateKey, displayTime, localInput, toUtc } from '../lib/time';
+import { dateKey, localInput, toUtc } from '../lib/time';
+import { rowLabel } from '../lib/presentation';
+export { rowLabel } from '../lib/presentation';
 
-export function rowLabel(row: DataRow): string {
-  if (row.doctorName && row.locationName && !row.patientName) return `${row.doctorName} · ${row.locationName}`;
-  if (row.patientName) return `${row.patientName}${row.startDatetime ? ` · ${displayTime(String(row.startDatetime))}` : ` · #${row.id}`}${row.locationName ? ` · ${row.locationName}` : ''}`;
-  if (row.name) return String(row.name);
-  if (row.firstName) return `${row.firstName} ${row.lastName || ''}${row.mrn ? ` · ${row.mrn}` : ''}`;
-  if (row.doctorId && row.locationId) return `${row.startDatetime ? displayTime(String(row.startDatetime)) : 'Doctor / location'} · Doctor ${row.doctorId} · Location ${row.locationId}`;
-  if (row.prescriptionDate) return `${row.prescriptionDate} · Patient ${row.patientId}`;
-  return `${row.testName || row.serviceName || row.reasonForVisit || row.key || row.code || row.action || 'Record'} #${row.id}`;
-}
 export function RelationSelect({ field, value, change, patientId, disabled }: { field: Field; value: unknown; change: (v: string) => void; patientId?: number; disabled?: boolean }) {
   const [search, setSearch] = useState(''); const [page, setPage] = useState(1);
   const { data, loading, error } = useLoad(async () => {
@@ -21,8 +14,8 @@ export function RelationSelect({ field, value, change, patientId, disabled }: { 
     if (value && !rows.some(r => r.id === Number(value))) { const selected = await api<DataRow>(`/${field.relation}/${value}`); rows.unshift(selected); }
     if (field.relation === 'users' && field.key === 'userId' && field.label === 'Doctor account') return rows.filter(r => r.role === 'doctor');
     return rows;
-  }, [field.relation, search, page, patientId]);
-  return <div className="relation-input"><input aria-label={`Search ${field.label.toLowerCase()} options`} placeholder={`Search ${field.label.toLowerCase()}…`} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} disabled={disabled} /><select aria-label={field.label} required={field.required} value={value == null ? '' : String(value)} onChange={e => change(e.target.value)} disabled={disabled || loading}><option value="">{loading ? 'Loading…' : `Select ${field.label.toLowerCase()}`}</option>{data?.map(row => <option key={row.id} value={row.id}>{rowLabel(row)}</option>)}</select><div className="option-pages"><button type="button" disabled={page === 1 || loading} onClick={() => setPage(p => p - 1)}>Previous options</button><button type="button" disabled={!data || data.length < 100 || loading} onClick={() => setPage(p => p + 1)}>More options</button></div><ErrorMessage error={error} /></div>;
+  }, [field.relation, search, page, patientId, value]);
+  return <div className="relation-input"><input aria-label={`Search ${field.label.toLowerCase()} options`} placeholder={`Search ${field.label.toLowerCase()}…`} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} disabled={disabled} /><select aria-label={field.label} required={field.required} value={value == null ? '' : String(value)} onChange={e => change(e.target.value)} disabled={disabled || loading}><option value="">{loading ? 'Loading…' : `Select ${field.label.toLowerCase()}`}</option>{data?.map(row => <option key={row.id} value={row.id}>{rowLabel(row)}</option>)}</select><div className="option-pages"><button type="button" disabled={disabled || page === 1 || loading} onClick={() => setPage(p => p - 1)}>Previous options</button><button type="button" disabled={disabled || !data || data.length < 100 || loading} onClick={() => setPage(p => p + 1)}>More options</button></div><ErrorMessage error={error} /></div>;
 }
 
 export function RecordForm({ fields, initial = {}, editing = false, submit, saved, patientId, resource }: { fields: Field[]; initial?: Record<string, unknown>; editing?: boolean; submit: (value: Record<string, unknown>) => Promise<unknown>; saved: (value: unknown) => void; patientId?: number; resource?: string }) {
@@ -36,15 +29,42 @@ export function RecordForm({ fields, initial = {}, editing = false, submit, save
   const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>();
   function change(key: string, value: unknown) {
     setValues(old => ({ ...old, [key]: value, ...(key === 'role' && value !== 'staff' ? { staffDoctorId: '', staffOrganizationId: '' } : {}) }));
-    if (value && key === 'appointmentId' && ['visits', 'followups'].includes(resource || '')) {
-      api<DataRow>(`/appointments/${value}`).then(row => setValues(old => ({ ...old, patientId: row.patientId, doctorId: row.doctorId, ...(resource === 'visits' ? { locationId: row.locationId } : {}) }))).catch(setError);
-    }
-    if (value && key === 'consultationId' && resource === 'prescriptions') {
-      api<DataRow>(`/consultations/${value}`).then(row => api<DataRow>(`/visits/${row.visitId}`)).then(row => setValues(old => ({ ...old, patientId: row.patientId, doctorId: row.doctorId }))).catch(setError);
-    }
   }
+  const appointmentId = values.appointmentId;
+  const consultationId = values.consultationId;
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState<unknown>();
+  const [visitLoading, setVisitLoading] = useState(false);
+  const [visitError, setVisitError] = useState<unknown>();
+  useEffect(() => {
+    let active = true;
+    setContextError(undefined);
+    const fromAppointment = !editing && ['visits', 'followups'].includes(resource || '') && appointmentId;
+    const fromConsultation = !editing && resource === 'prescriptions' && consultationId;
+    if (!fromAppointment && !fromConsultation) { setContextLoading(false); return; }
+    setContextLoading(true);
+    const request = fromAppointment ? api<DataRow>(`/appointments/${appointmentId}`)
+      : api<DataRow>(`/consultations/${consultationId}`).then(row => api<DataRow>(`/visits/${row.visitId}`));
+    request.then(row => { if (active) setValues(old => ({ ...old, patientId: row.patientId, doctorId: row.doctorId, ...(resource === 'visits' ? { locationId: row.locationId } : {}) })); })
+      .catch(e => { if (active) setContextError(e); }).finally(() => { if (active) setContextLoading(false); });
+    return () => { active = false; };
+  }, [resource, editing, appointmentId, consultationId]);
+  useEffect(() => {
+    let active = true;
+    if (editing || !patientId || initial.visitId || !['consultations', 'labrequests', 'imagingrequests'].includes(resource || '')) return;
+    setVisitLoading(true); setVisitError(undefined);
+    // Two results suffice to distinguish a unique visit from an ambiguous patient history.
+    api<DataRow[]>(`/visits?${query({ patientId, pageSize: 2 })}`).then(rows => {
+      if (active && rows.length === 1) setValues(old => old.visitId ? old : { ...old, visitId: rows[0].id });
+    }).catch(e => { if (active) setVisitError(e); }).finally(() => { if (active) setVisitLoading(false); });
+    return () => { active = false; };
+  }, [resource, editing, patientId, initial.visitId]);
+  const locked = (key: string) => resource === 'visits' && (
+    (['appointmentId', 'patientId', 'doctorId', 'locationId'].includes(key) && (editing || key !== 'appointmentId')) ||
+    (key === 'status' && editing && initial.status === 'completed'));
+
   async function save(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(undefined);
+    event.preventDefault(); if (contextLoading || contextError || visitLoading || visitError) return; setBusy(true); setError(undefined);
     try {
       const payload: Record<string, unknown> = {};
       for (const field of shown) {
@@ -52,7 +72,7 @@ export function RecordForm({ fields, initial = {}, editing = false, submit, save
         if (field.type === 'checkbox') value = Boolean(value);
         else if (value === '' || value === undefined) value = null;
         else if (field.relation || field.type === 'number' || field.key === 'dayOfWeek') value = Number(value);
-        else if (field.type === 'datetime') value = toUtc(String(value));
+        else if (field.type === 'datetime') value = initial[field.key] && value === localInput(String(initial[field.key])) ? initial[field.key] : toUtc(String(value));
         payload[field.key] = value;
       }
       if (resource === 'users' && payload.role === 'staff' && Boolean(payload.staffDoctorId) === Boolean(payload.staffOrganizationId)) throw new Error('Assign staff to exactly one doctor or one organization.');
@@ -62,14 +82,15 @@ export function RecordForm({ fields, initial = {}, editing = false, submit, save
     } catch (e) { setError(e); } finally { setBusy(false); }
   }
   return <form onSubmit={save} className="record-form">
+    {resource === 'visits' && <p className="detail-note wide-field">{editing ? 'Appointment, patient, doctor and location are fixed for this visit.' : 'Patient, doctor and location come from the selected appointment.'}{editing && initial.status === 'completed' ? ' This visit is completed; only timestamp corrections are available.' : ''}</p>}
     {shown.filter(f => !f.key.startsWith('staff') || values.role === 'staff').map(field => <div key={field.key} className={field.type === 'textarea' ? 'wide-field' : ''}>
-      {field.relation ? <><span className="field-label">{field.label}{field.required ? ' *' : ''}</span><RelationSelect field={field} value={values[field.key]} change={v => change(field.key, v)} patientId={patientId} disabled={busy} /></> : <label>{field.label}{field.required ? ' *' : ''}
-        {field.options ? <select aria-label={field.label} required={field.required} value={String(values[field.key] ?? '')} onChange={e => change(field.key, e.target.value)}>{field.options.map(option => <option key={option} value={option}>{field.key === 'dayOfWeek' ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(option)] : option.replaceAll('_', ' ')}</option>)}</select>
+      {field.relation ? <><span className="field-label">{field.label}{field.required ? ' *' : ''}</span><RelationSelect field={field} value={values[field.key]} change={v => change(field.key, v)} patientId={patientId} disabled={busy || locked(field.key)} /></> : <label>{field.label}{field.required ? ' *' : ''}
+        {field.options ? <select aria-label={field.label} disabled={busy || locked(field.key)} required={field.required} value={String(values[field.key] ?? '')} onChange={e => change(field.key, e.target.value)}>{field.options.map(option => <option key={option} value={option}>{field.key === 'dayOfWeek' ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][Number(option)] : option.replaceAll('_', ' ')}</option>)}</select>
           : field.type === 'textarea' ? <textarea rows={3} value={String(values[field.key] ?? '')} onChange={e => change(field.key, e.target.value)} />
           : field.type === 'checkbox' ? <input type="checkbox" checked={Boolean(values[field.key])} onChange={e => change(field.key, e.target.checked)} />
           : <input type={field.type === 'datetime' ? 'datetime-local' : field.type || 'text'} required={field.required} min={field.min} step={field.type === 'number' ? field.key === 'amount' ? 'any' : '1' : undefined} autoComplete={field.type === 'password' ? 'new-password' : undefined} value={String(values[field.key] ?? '')} onChange={e => change(field.key, e.target.value)} />}
       </label>}
     </div>)}
-    <div className="wide-field"><ErrorMessage error={error} /><button className="primary-button" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
+    <div className="wide-field"><ErrorMessage error={error || contextError || visitError} /><button className="primary-button" disabled={busy || contextLoading || !!contextError || visitLoading || !!visitError}>{busy ? 'Saving…' : 'Save'}</button></div>
   </form>;
 }

@@ -19,9 +19,11 @@ export interface AppointmentDto {
   createdAt: string;
   updatedAt: string;
   hasVisits: boolean;
+  hasCompletedVisits: boolean;
 }
 
 export interface AuditLogDto {
+  userName: string;
   id: number;
   userId: number;
   action: string;
@@ -220,6 +222,9 @@ export interface PatientDto {
 }
 
 export interface PaymentRecordDto {
+  visitName: string;
+  visitDatetime: string;
+  collectedByName: string;
   id: number;
   visitId: number;
   amount: number;
@@ -276,6 +281,7 @@ export interface RoleDto {
 }
 
 export interface ScheduleExceptionDto {
+  doctorLocationName: string;
   id: number;
   doctorLocationId: number;
   date: string;
@@ -288,6 +294,7 @@ export interface ScheduleExceptionDto {
 }
 
 export interface ScheduleDto {
+  doctorLocationName: string;
   id: number;
   doctorLocationId: number;
   dayOfWeek: number;
@@ -315,6 +322,8 @@ export interface UserRoleDto {
 }
 
 export interface UserDto {
+  staffDoctorName: string | null;
+  staffOrganizationName: string | null;
   id: number;
   name: string;
   email: string;

@@ -30,7 +30,7 @@ public class ReportService(ResourceAccess access)
         var now = DateTime.UtcNow;
         var upcoming = await periodAppointments.Where(a => a.StartDatetime >= now && a.Status != "cancelled" && a.Status != "completed")
             .OrderBy(a => a.StartDatetime).Take(50).Select(a => new AppointmentDto { Id = a.Id, PatientName = a.Patient.FirstName + " " + a.Patient.LastName, DoctorName = a.Doctor.FirstName + " " + a.Doctor.LastName, LocationName = a.Location.Name, VisitTypeName = a.VisitType.Name, PatientId = a.PatientId, DoctorId = a.DoctorId, LocationId = a.LocationId, VisitTypeId = a.VisitTypeId,
-                StartDatetime = a.StartDatetime, EndDatetime = a.EndDatetime, Status = a.Status, CreatedBy = a.CreatedBy, CreatedAt = a.CreatedAt, UpdatedAt = a.UpdatedAt, HasVisits = a.Visits.Any() }).ToListAsync();
+                StartDatetime = a.StartDatetime, EndDatetime = a.EndDatetime, Status = a.Status, CreatedBy = a.CreatedBy, CreatedAt = a.CreatedAt, UpdatedAt = a.UpdatedAt, HasCompletedVisits = a.Visits.Any(v => v.Status == "completed"), HasVisits = a.Visits.Any() }).ToListAsync();
         return new(counts, activity, collections, upcoming);
     }
 }

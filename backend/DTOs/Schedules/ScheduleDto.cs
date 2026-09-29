@@ -5,6 +5,7 @@ public class ScheduleDto
     public int Id { get; set; }
 
     public int DoctorLocationId { get; set; }
+    public string DoctorLocationName { get; set; } = "";
 
     public int DayOfWeek { get; set; }
 

@@ -24,6 +24,7 @@ public class ScheduleExceptionService : IScheduleExceptionService
             {
                 Id = se.Id,
                 DoctorLocationId = se.DoctorLocationId,
+                DoctorLocationName = se.DoctorLocation.Doctor.FirstName + " " + se.DoctorLocation.Doctor.LastName + " - " + se.DoctorLocation.Location.Name,
                 Date = se.Date,
                 StartTime = se.StartTime,
                 EndTime = se.EndTime,
@@ -43,6 +44,7 @@ public class ScheduleExceptionService : IScheduleExceptionService
             {
                 Id = se.Id,
                 DoctorLocationId = se.DoctorLocationId,
+                DoctorLocationName = se.DoctorLocation.Doctor.FirstName + " " + se.DoctorLocation.Doctor.LastName + " - " + se.DoctorLocation.Location.Name,
                 Date = se.Date,
                 StartTime = se.StartTime,
                 EndTime = se.EndTime,
@@ -116,18 +118,7 @@ public class ScheduleExceptionService : IScheduleExceptionService
 
         await _context.SaveChangesAsync();
 
-        return new ScheduleExceptionDto
-        {
-            Id = scheduleException.Id,
-            DoctorLocationId = scheduleException.DoctorLocationId,
-            Date = scheduleException.Date,
-            StartTime = scheduleException.StartTime,
-            EndTime = scheduleException.EndTime,
-            IsAvailable = scheduleException.IsAvailable,
-            Reason = scheduleException.Reason,
-            CreatedAt = scheduleException.CreatedAt,
-            UpdatedAt = scheduleException.UpdatedAt
-        };
+        return (await GetByIdAsync(scheduleException.Id))!;
     }
 
     public async Task<ScheduleExceptionDto?> UpdateAsync(
@@ -169,18 +160,7 @@ public class ScheduleExceptionService : IScheduleExceptionService
 
         await _context.SaveChangesAsync();
 
-        return new ScheduleExceptionDto
-        {
-            Id = scheduleException.Id,
-            DoctorLocationId = scheduleException.DoctorLocationId,
-            Date = scheduleException.Date,
-            StartTime = scheduleException.StartTime,
-            EndTime = scheduleException.EndTime,
-            IsAvailable = scheduleException.IsAvailable,
-            Reason = scheduleException.Reason,
-            CreatedAt = scheduleException.CreatedAt,
-            UpdatedAt = scheduleException.UpdatedAt
-        };
+        return (await GetByIdAsync(scheduleException.Id))!;
     }
 
     public async Task<bool> DeleteAsync(int id)

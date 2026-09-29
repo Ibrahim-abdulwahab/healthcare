@@ -63,10 +63,11 @@ test('B: drag reschedules through API and a conflicting drag preserves the accep
 
 test('C and E: secretary creates a visit, records payment, and cancellations free slots', async ({ page }) => {
   await login(page, 11);
-  await page.goto('/records/visits');
+  await page.goto(`/records/visits?appointmentId=${appointmentId}`);
   await page.getByRole('button', { name: 'Add visit', exact: true }).click();
-  await selectOption(page, 'Appointment', appointmentId);
+  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Appointment', exact: true })).toHaveValue(String(appointmentId));
   await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Patient', exact: true })).toHaveValue(String(patientId));
+  for (const field of ['Patient', 'Doctor', 'Location']) await expect(page.getByRole('dialog').getByRole('combobox', { name: field, exact: true })).toBeDisabled();
   const created = page.waitForResponse(r => r.url().endsWith('/api/visits') && r.request().method() === 'POST');
   await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
   const response = await created; expect(response.status()).toBe(201); visitId = (await response.json()).id;
@@ -95,7 +96,7 @@ test('D: doctor authors consultation, prescription/items, follow-up, lab and ima
   await page.goto(`/patients/${patientId}`);
   await page.getByRole('tab', { name: 'Consultations', exact: true }).click();
   await page.getByRole('button', { name: 'Add consultation', exact: true }).click();
-  await selectOption(page, 'Visit', visitId);
+  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Visit', exact: true })).toHaveValue(String(visitId));
   await page.getByRole('dialog').getByLabel('Reason for visit').fill('Browser workflow review');
   await page.getByRole('dialog').getByLabel('Diagnosis').fill('Test diagnosis');
   const created = page.waitForResponse(r => r.url().endsWith('/api/consultations') && r.request().method() === 'POST');
@@ -225,5 +226,88 @@ test('Browser displays real validation/scope failures and clears invalid session
   await page.goto('/patients');
   await expect(page.getByRole('heading', { name: 'Sign in to your practice' })).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('healthcare.accessToken'))).toBeNull();
+  await expect(page.getByRole('status')).toContainText('Unsaved form entries are not retained');
+});
+
+async function restore(page: Page, user: number, path: string) {
+  await page.goto('/login');
+  await page.evaluate(token => sessionStorage.setItem('healthcare.accessToken', token), tokens[user]);
+  await page.goto(path);
+  await expect(page.locator('.account strong')).toHaveText(`Test ${user}`);
+}
+
+test('Cleanup: meaningful labels, checkout completion, and read-only completed visit context', async ({ page }) => {
+  await restore(page, 10, '/records/schedules');
+  await expect(page.getByRole('cell', { name: 'Four Doctor - Location Two', exact: true }).first()).toBeVisible();
+  await page.goto('/records/audit-logs');
+  await expect(page.getByRole('cell', { name: 'Test 11 (user11@test.local)', exact: true }).first()).toBeVisible();
+  await page.goto('/records/users');
+  await page.getByRole('row').filter({ hasText: 'user11@test.local' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('Four Doctor', { exact: true })).toBeVisible();
+  const updated = page.getByRole('dialog').locator('dt').filter({ hasText: 'Updated At' }).locator('..').locator('dd');
+  await expect(updated).not.toContainText('T'); // Friendly date rather than ISO.
+  await page.goto('/records/paymentrecords');
+  await expect(page.getByRole('cell').filter({ hasText: 'Browser Patient - Four Doctor' })).toBeVisible();
+  await restore(page, 4, '/records/visits');
+  const row = page.getByRole('row').filter({ hasText: 'Browser Patient' });
+  await expect(row.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+  await row.getByRole('button', { name: 'Correct timestamps', exact: true }).click();
+  for (const field of ['Appointment', 'Patient', 'Doctor', 'Location', 'Status']) await expect(page.getByRole('dialog').getByRole('combobox', { name: field, exact: true })).toBeDisabled();
+  await expect(page.getByRole('dialog').getByLabel('Check-out (Beirut)')).not.toHaveValue('');
+  const before = await page.request.get(`/api/visits/${visitId}`, { headers: await headers(page) });
+  const beforeVisit = await before.json();
+  const saved = page.waitForResponse(r => r.url().endsWith(`/api/visits/${visitId}`) && r.request().method() === 'PUT');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+  expect((await saved).status()).toBe(200);
+  const after = await page.request.get(`/api/visits/${visitId}`, { headers: await headers(page) });
+  expect((await after.json()).checkOutTime).toBe(beforeVisit.checkOutTime); // No lost seconds/fractions on unchanged form fields.
+});
+
+test('Cleanup: unique visit is preselected, ambiguous history is not guessed, explicit context wins', async ({ page }) => {
+  await restore(page, 4, `/patients/${patientId}`);
+  for (const tab of ['Lab requests', 'Imaging requests']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await page.getByRole('button', { name: tab === 'Lab requests' ? 'Add lab request' : 'Add imaging request', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Visit', exact: true })).toHaveValue(String(visitId));
+    await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  }
+  const created = await page.request.post('/api/visits', { headers: { Authorization: `Bearer ${tokens[11]}` }, data: { appointmentId, patientId, doctorId: 4, locationId: 2 } });
+  expect(created.status()).toBe(201); const second = await created.json();
+  await page.reload(); await page.getByRole('tab', { name: 'Lab requests', exact: true }).click();
+  await page.getByRole('button', { name: 'Add lab request', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
+  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Visit', exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Visit context', exact: true }).selectOption(String(second.id));
+  await page.getByRole('button', { name: 'Add lab request', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('combobox', { name: 'Visit', exact: true })).toHaveValue(String(second.id));
+});
+
+test('Cleanup: completed-visit appointment hides lifecycle and deletion controls without changing stored status', async ({ page }) => {
+  await restore(page, 10, '/');
+  const created = await page.request.post('/api/visits', { headers: await headers(page), data: { appointmentId: 101, patientId: 1, doctorId: 4, locationId: 2, status: 'completed' } });
+  expect(created.status()).toBe(201);
+  await page.goto('/calendar?date=2029-12-31&doctorId=4');
+  await page.locator('.calendar-event').filter({ hasText: 'Patient 1 Test' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('booked', { exact: true })).toBeVisible();
+  for (const action of ['Mark arrived', 'Cancel appointment', 'Delete appointment']) await expect(dialog.getByRole('button', { name: action, exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('link', { name: 'Reschedule', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('link', { name: 'View visits', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Edit booking note', exact: true })).toBeVisible();
+  expect((await page.request.patch('/api/appointments/101/status', { headers: await headers(page), data: { status: 'arrived' } })).status()).toBe(409);
+});
+
+test('Cleanup: expiry warning and expiry redirect explain unsaved work', async ({ page }) => {
+  await page.clock.install();
+  await restore(page, 11, '/patients');
+  await page.getByRole('button', { name: 'Add patient', exact: true }).click();
+  const expiry = await page.evaluate(() => JSON.parse(atob(sessionStorage.getItem('healthcare.accessToken')!.split('.')[1])).exp * 1000);
+  const remaining = expiry - await page.evaluate(() => Date.now());
+  await page.clock.fastForward(remaining - 90000);
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('Save your work');
+  await page.clock.fastForward(91000);
+  await expect(page.getByRole('heading', { name: 'Sign in to your practice' })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Unsaved form entries are not retained');
 });
 

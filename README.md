@@ -41,7 +41,7 @@ Do not commit real credentials or signing keys. Startup validates the required s
 ```powershell
 dotnet restore Healthcarev2.sln
 dotnet build Healthcarev2.sln --no-restore
-dotnet run --project backend/Healthcare.Api.csproj --launch-profile https
+dotnet run --project backend/Healthcare.Api.csproj --launch-profile http
 ```
 
 The existing HTTPS profile uses `https://localhost:7198`; the HTTP profile uses `http://localhost:5252`. Trust your local ASP.NET development certificate as appropriate for your machine.
@@ -58,10 +58,10 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The Vite development proxy forwards `/api` to the existing backend HTTPS profile. To use its HTTP profile instead:
+Open `http://127.0.0.1:5173`. The Vite development proxy defaults to the normal backend HTTP profile at `http://localhost:5252`; no override is needed. To use the HTTPS profile instead:
 
 ```powershell
-$env:API_PROXY_TARGET = 'http://localhost:5252'
+$env:API_PROXY_TARGET = 'https://localhost:7198'
 npm run dev
 ```
 
@@ -70,6 +70,8 @@ npm run dev
 ## Authentication and authorization
 
 Login uses `POST /api/auth/login`. The JWT is centrally held in per-tab `sessionStorage`, restored via `GET /api/auth/me`, attached by `api/client.ts`, and cleared on logout or an invalid session. This is bearer-token auth, not cookie/refresh-token auth. Logout does not revoke a copied token server-side. No refresh/revocation system was introduced.
+
+The existing development JWT lifetime remains **60 minutes**, with zero server clock skew. The UI warns during the final two minutes, checks known expiry before submitting requests, and explains expiry/unsaved work on the login screen. It does not extend token lifetime, refresh tokens, or persist clinical form drafts. Production lifetime remains controlled by `Jwt:ExpirationMinutes`.
 
 Every authenticated request checks the current active user and role in PostgreSQL. A changed role invalidates the old token. Staff assignments are loaded from the database on each request; staff must have exactly one assigned doctor or organization.
 
@@ -111,6 +113,10 @@ booked → arrived → waiting → in_consultation → completed
 ```
 
 Visits do not silently progress the appointment status. Authorized secretaries/admins use the appointment's explicit actions. Once a visit exists, patient, doctor, location, visit type, and time are locked against reassignment/rescheduling. Parent changes that would contradict clinical descendants are rejected instead of cascading through history.
+
+Cleanup decisions approved on 2026-09-28: an existing Visit's appointment/patient/doctor/location context is immutable. Completing a Visit fills a missing checkout timestamp on the server while preserving supplied/existing checkout times. Completed Visits cannot reopen; authorized users may correct timestamps only. If **any** associated Visit is completed, all further appointment status changes are blocked, including cancellation. Existing appointment statuses are preserved without backfilling or automatic progression. The UI retains history access and authorized booking-note corrections, labels the visit link “View visits,” and hides impossible rescheduling/deletion/lifecycle actions. Multiple Visits per appointment remain supported.
+
+Clinical forms opened in a patient chart preselect a Visit only if there is exactly one scoped candidate, or use an explicitly selected Visit context. A preselected appointment populates new Visit context automatically; derived fields are read-only. Display labels come from scoped response DTO projections, and timestamps use the shared Beirut formatter without changing storage.
 
 All API mutations execute inside a PostgreSQL transaction holding a transaction-scoped advisory lock. Consequently availability validation and booking persistence are serialized across API instances using the same database; two simultaneous overlapping API bookings cannot both succeed. This intentionally coarse lock is a throughput ceiling: replace it with ordered resource/doctor locks if measured write load requires it. Direct SQL writers must follow equivalent locking/integrity rules; no database exclusion constraint was added.
 
@@ -179,7 +185,7 @@ Tests use `HEALTHCARE_TEST_CONNECTION` if set, otherwise the ignored local devel
 
 Full-stack verification starts real Kestrel and Vite processes on unused loopback ports, runs headless Playwright using installed Microsoft Edge, and shuts down the processes afterward. The browser deliberately uses `America/Los_Angeles` while scheduling remains Beirut-local. Install Edge or adjust the local Playwright channel if necessary. No API response mocking is used. Screenshots/traces/reports are written under ignored `test-results/`; retain only appropriate test artifacts.
 
-The verification runner checks `HasPendingModelChanges()` against the unchanged EF snapshot. See the Phase 2 report for exact final counts and workflow results.
+The verification runner checks `HasPendingModelChanges()` against the unchanged EF snapshot. See the [cleanup report](docs/cleanup-report.md) for current verification results; the Phase 2 report records the earlier baseline.
 
 ## Deployment tasks and boundaries
 

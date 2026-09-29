@@ -31,4 +31,5 @@ public class AppointmentDto
 
     public DateTime UpdatedAt { get; set; }
     public bool HasVisits { get; set; }
+    public bool HasCompletedVisits { get; set; }
 }

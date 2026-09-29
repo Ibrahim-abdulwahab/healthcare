@@ -67,13 +67,14 @@ public class VisitService : IVisitService
 
     public async Task<VisitDto> CreateAsync(CreateVisitDto dto)
     {
+        var checkOutTime = dto.CheckOutTime ?? (dto.Status == "completed" ? DateTime.UtcNow : (DateTime?)null);
         await ValidateVisitAsync(
             dto.AppointmentId,
             dto.PatientId,
             dto.DoctorId,
             dto.LocationId,
             dto.CheckInTime,
-            dto.CheckOutTime
+            checkOutTime
         );
 
         var now = DateTime.UtcNow;
@@ -86,7 +87,7 @@ public class VisitService : IVisitService
             LocationId = dto.LocationId,
             Status = dto.Status,
             CheckInTime = dto.CheckInTime,
-            CheckOutTime = dto.CheckOutTime,
+            CheckOutTime = checkOutTime,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -94,7 +95,7 @@ public class VisitService : IVisitService
         _context.Visits.Add(visit);
         await _context.SaveChangesAsync();
 
-        return ToDto(visit);
+        return (await GetByIdAsync(visit.Id))!;
     }
 
     public async Task<VisitDto?> UpdateAsync(int id, UpdateVisitDto dto)
@@ -104,17 +105,19 @@ public class VisitService : IVisitService
         if (visit is null)
             return null;
 
-        if ((visit.PatientId != dto.PatientId || visit.DoctorId != dto.DoctorId || visit.LocationId != dto.LocationId || visit.AppointmentId != dto.AppointmentId) &&
-            (await _context.Consultations.AnyAsync(c => c.VisitId == id) || await _context.PaymentRecords.AnyAsync(p => p.VisitId == id) ||
-             await _context.LabRequests.AnyAsync(l => l.VisitId == id) || await _context.ImagingRequests.AnyAsync(i => i.VisitId == id)))
-            throw new ApiException(409, "A visit with clinical or payment records cannot be reassigned.");
+        if (visit.PatientId != dto.PatientId || visit.DoctorId != dto.DoctorId || visit.LocationId != dto.LocationId || visit.AppointmentId != dto.AppointmentId)
+            throw new ApiException(409, "An existing visit's appointment, patient, doctor and location cannot be changed.");
+        if (visit.Status == "completed" && dto.Status != "completed")
+            throw new ApiException(409, "A completed visit cannot be reopened. Only timestamp corrections are permitted.");
+        var checkOutTime = dto.CheckOutTime ?? visit.CheckOutTime;
+        if (visit.Status != "completed" && dto.Status == "completed") checkOutTime ??= DateTime.UtcNow;
         await ValidateVisitAsync(
             dto.AppointmentId,
             dto.PatientId,
             dto.DoctorId,
             dto.LocationId,
             dto.CheckInTime,
-            dto.CheckOutTime
+            checkOutTime
         );
 
         visit.AppointmentId = dto.AppointmentId;
@@ -123,12 +126,12 @@ public class VisitService : IVisitService
         visit.LocationId = dto.LocationId;
         visit.Status = dto.Status;
         visit.CheckInTime = dto.CheckInTime;
-        visit.CheckOutTime = dto.CheckOutTime;
+        visit.CheckOutTime = checkOutTime;
         visit.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        return ToDto(visit);
+        return (await GetByIdAsync(visit.Id))!;
     }
 
     public async Task<bool> DeleteAsync(int id)
