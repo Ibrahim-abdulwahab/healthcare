@@ -42,6 +42,26 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+// Allow requests from explicitly configured frontend origins.
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        }
+    });
+});
+
+
 // OpenAPI
 builder.Services.AddOpenApi();
 
@@ -118,12 +138,12 @@ builder.Services
     })
     .AddJwtBearer(options =>
 {
-var jwtSettings = builder.Configuration
-    .GetSection("Jwt")
-    .Get<JwtSettings>()
-    ?? throw new InvalidOperationException(
-        "JWT configuration is missing."
-    );
+    var jwtSettings = builder.Configuration
+        .GetSection("Jwt")
+        .Get<JwtSettings>()
+        ?? throw new InvalidOperationException(
+            "JWT configuration is missing."
+        );
 
 
     options.TokenValidationParameters =
@@ -221,9 +241,20 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+
 app.UseHttpsRedirection();
 
+app.UseRouting();
+app.UseCors("Frontend");
+
 app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
+
+app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
+app.Run();
+
 app.UseAuthorization();
 app.UseRateLimiter();
 
